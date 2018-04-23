@@ -706,6 +706,9 @@ struct mvpp2 {
 	/* Workqueue to gather hardware statistics */
 	char queue_name[30];
 	struct workqueue_struct *stats_queue;
+
+	/* Debugfs root entry */
+	struct dentry *dbgfs_dir;
 };
 
 struct mvpp2_pcpu_stats {
