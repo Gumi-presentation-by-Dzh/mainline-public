@@ -13,6 +13,16 @@
 #include "mvpp2.h"
 #include "mvpp2_cls.h"
 
+static void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
+				struct mvpp2_cls_flow_entry *fe)
+{
+	fe->index = index;
+	mvpp2_write(priv, MVPP2_CLS_FLOW_INDEX_REG, index);
+	fe->data[0] = mvpp2_read(priv, MVPP2_CLS_FLOW_TBL0_REG);
+	fe->data[1] = mvpp2_read(priv, MVPP2_CLS_FLOW_TBL1_REG);
+	fe->data[2] = mvpp2_read(priv, MVPP2_CLS_FLOW_TBL2_REG);
+}
+
 /* Update classification flow table registers */
 static void mvpp2_cls_flow_write(struct mvpp2 *priv,
 				 struct mvpp2_cls_flow_entry *fe)
@@ -47,11 +57,23 @@ static void mvpp2_cls_lookup_write(struct mvpp2 *priv,
 }
 
 /* Operations on flow entry */
+static int mvpp2_cls_sw_flow_hek_num_get(struct mvpp2_cls_flow_entry *fe)
+{
+	return fe->data[1] & MVPP2_CLS_FLOW_TBL1_N_FIELDS_MASK;
+}
+
 static void mvpp2_cls_sw_flow_hek_num_set(struct mvpp2_cls_flow_entry *fe,
 					  int num_of_fields)
 {
 	fe->data[1] &= ~MVPP2_CLS_FLOW_TBL1_N_FIELDS_MASK;
 	fe->data[1] |= MVPP2_CLS_FLOW_TBL1_N_FIELDS(num_of_fields);
+}
+
+static int mvpp2_cls_sw_flow_hek_get(struct mvpp2_cls_flow_entry *fe,
+				     int field_index)
+{
+	return (fe->data[2] >> MVPP2_CLS_FLOW_TBL2_FLD_OFFS(field_index)) &
+		MVPP2_CLS_FLOW_TBL2_FLD_MASK;
 }
 
 static void mvpp2_cls_sw_flow_hek_set(struct mvpp2_cls_flow_entry *fe,
@@ -242,6 +264,144 @@ void mvpp22_rss_fill_table(struct mvpp2_port *port, u32 table)
 		mvpp2_write(priv, MVPP22_RSS_TABLE_ENTRY,
 			    mvpp22_rxfh_indir(port, port->indir[i]));
 	}
+}
+
+static int mvpp2_flow_add_hek_field(struct mvpp2_cls_flow_entry *fe,
+				    u32 field_id)
+{
+	int nb_fields = mvpp2_cls_sw_flow_hek_num_get(fe);
+
+	if (nb_fields == MVPP2_FLOW_N_FIELDS)
+		return -EINVAL;
+
+	mvpp2_cls_sw_flow_hek_set(fe, nb_fields, field_id);
+
+	mvpp2_cls_sw_flow_hek_num_set(fe, nb_fields + 1);
+
+	return 0;
+}
+
+/* Add HEK fields to the flow command */
+static int mvpp2_rss_hash_opts_set(struct mvpp2_cls_flow_entry *fe, u32 cmd,
+				   int proto)
+{
+	/* It's a requirement to add HEK fields to the flow in ascending
+	 * field_id order
+	 */
+	if (cmd & RXH_VLAN)
+		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_VLAN))
+			return -EINVAL;
+
+	if (proto == MVPP2_RSS_IP4) {
+		if (cmd & RXH_IP_SRC)
+			if (mvpp2_flow_add_hek_field(fe,
+						     MVPP22_CLS_FIELD_IP4SA))
+				return -EINVAL;
+
+		if (cmd & RXH_IP_DST)
+			if (mvpp2_flow_add_hek_field(fe,
+						     MVPP22_CLS_FIELD_IP4DA))
+				return -EINVAL;
+	} else {
+		if (cmd & RXH_IP_SRC)
+			if (mvpp2_flow_add_hek_field(fe,
+						     MVPP22_CLS_FIELD_IP6SA))
+				return -EINVAL;
+
+		if (cmd & RXH_IP_DST)
+			if (mvpp2_flow_add_hek_field(fe,
+						     MVPP22_CLS_FIELD_IP6DA))
+				return -EINVAL;
+	}
+
+	if (cmd & RXH_L4_B_0_1)
+		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_L4SIP))
+			return -EINVAL;
+
+	if (cmd & RXH_L4_B_2_3)
+		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_L4DIP))
+			return -EINVAL;
+	return 0;
+}
+
+int mvpp2_rss_set_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
+{
+	int ret = 0, engine = MVPP22_CLS_ENGINE_C3HB;
+	int flow_id = MVPP22_RSS_FLOW_HASH(port->id);
+	struct mvpp2_cls_flow_entry fe;
+
+	mvpp2_cls_flow_read(port->priv, flow_id, &fe);
+
+	/* Clear former HEK parameters */
+	mvpp2_cls_sw_flow_hek_num_set(&fe, 0);
+	fe.data[2] = 0;
+
+	switch (info->flow_type) {
+	case IPV4_FLOW:
+		/* When L4 data isn't needed, we use C3HA engine. C3HB engine
+		 * automatically adds the L4 info field to the hash.
+		 * The L4 info field comes from the Header Parser.
+		 */
+		engine = MVPP22_CLS_ENGINE_C3HA;
+	case TCP_V4_FLOW:
+	case UDP_V4_FLOW:
+		ret = mvpp2_rss_hash_opts_set(&fe, info->data, MVPP2_RSS_IP4);
+		break;
+	case IPV6_FLOW:
+		engine = MVPP22_CLS_ENGINE_C3HA;
+	case TCP_V6_FLOW:
+	case UDP_V6_FLOW:
+		ret = mvpp2_rss_hash_opts_set(&fe, info->data, MVPP2_RSS_IP6);
+		break;
+	default: return -EOPNOTSUPP;
+	}
+
+	mvpp2_cls_sw_flow_eng_set(&fe, engine);
+
+	mvpp2_cls_flow_write(port->priv, &fe);
+
+	return ret;
+}
+
+int mvpp2_rss_get_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
+{
+	int n_fields, field, flow_id, i;
+	struct mvpp2_cls_flow_entry fe;
+
+	flow_id = MVPP22_RSS_FLOW_HASH(port->id);
+
+	mvpp2_cls_flow_read(port->priv, flow_id, &fe);
+
+	n_fields = mvpp2_cls_sw_flow_hek_num_get(&fe);
+	info->data = 0;
+
+	for (i = 0; i < n_fields; i++) {
+		field = mvpp2_cls_sw_flow_hek_get(&fe, i);
+
+		switch (field) {
+		case MVPP22_CLS_FIELD_VLAN:
+			info->data |= RXH_VLAN;
+			break;
+		case MVPP22_CLS_FIELD_IP4SA:
+		case MVPP22_CLS_FIELD_IP6SA:
+			info->data |= RXH_IP_SRC;
+			break;
+		case MVPP22_CLS_FIELD_IP6DA:
+		case MVPP22_CLS_FIELD_IP4DA:
+			info->data |= RXH_IP_DST;
+			break;
+		case MVPP22_CLS_FIELD_L4SIP:
+			info->data |= RXH_L4_B_0_1;
+			break;
+		case MVPP22_CLS_FIELD_L4DIP:
+			info->data |= RXH_L4_B_2_3;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	return 0;
 }
 
 /* Initial configuration of the classifier C2 engine, used to tag packets for
