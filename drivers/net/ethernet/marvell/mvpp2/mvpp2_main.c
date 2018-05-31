@@ -3371,8 +3371,11 @@ static int mvpp2_open(struct net_device *dev)
 
 	mvpp2_start_dev(port);
 
-	if (mvpp22_rss_is_supported())
-		mvpp22_init_rss(port);
+	/* Enable RSS */
+	if (mvpp22_rss_is_supported()) {
+		dev->features |= NETIF_F_RXHASH;
+		mvpp22_rss_enable(port);
+	}
 
 	/* Start hardware statistics gathering */
 	queue_delayed_work(priv->stats_queue, &port->stats_work,
@@ -3630,6 +3633,13 @@ static int mvpp2_set_features(struct net_device *dev,
 
 			mvpp2_prs_vid_disable_filtering(port);
 		}
+	}
+
+	if (changed & NETIF_F_RXHASH) {
+		if (features & NETIF_F_RXHASH)
+			mvpp22_rss_enable(port);
+		else
+			mvpp22_rss_disable(port);
 	}
 
 	return 0;
@@ -4151,6 +4161,7 @@ static int mvpp2_port_init(struct mvpp2_port *port)
 	mvpp2_cls_oversize_rxq_set(port);
 	mvpp2_cls_port_config(port);
 
+	mvpp2_port_init_rss(port);
 	/* Provide an initial Rx packet size */
 	port->pkt_size = MVPP2_RX_PKT_SIZE(port->dev->mtu);
 
@@ -4757,6 +4768,9 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	dev->hw_features |= features | NETIF_F_RXCSUM | NETIF_F_GRO |
 			    NETIF_F_HW_VLAN_CTAG_FILTER;
 
+	if (mvpp22_rss_is_supported())
+		dev->hw_features |= NETIF_F_RXHASH;
+
 	if (port->pool_long->id == MVPP2_BM_JUMBO && port->id != 0) {
 		dev->features &= ~(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM);
 		dev->hw_features &= ~(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM);
@@ -5059,6 +5073,9 @@ static int mvpp2_init(struct platform_device *pdev, struct mvpp2 *priv)
 
 	/* Classifier default initialization */
 	mvpp2_cls_init(priv);
+
+	/* Global RSS configuration */
+	mvpp2_init_rss(priv);
 
 	return 0;
 }
