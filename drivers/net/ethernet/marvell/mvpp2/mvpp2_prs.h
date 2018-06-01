@@ -10,6 +10,7 @@
  * warranty of any kind, whether express or implied.
  */
 #include <linux/kernel.h>
+#include <linux/platform_device.h>
 #include <linux/netdevice.h>
 
 #include "mvpp2.h"
