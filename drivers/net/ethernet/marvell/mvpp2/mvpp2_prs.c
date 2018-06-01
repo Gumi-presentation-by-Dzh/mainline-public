@@ -22,7 +22,7 @@
 #include "mvpp2_prs.h"
 
 /* Update parser tcam and sram hw entries */
-static int mvpp2_prs_hw_write(struct mvpp2 *priv, struct mvpp2_prs_entry *pe)
+int mvpp2_prs_hw_write(struct mvpp2 *priv, struct mvpp2_prs_entry *pe)
 {
 	int i;
 
@@ -46,8 +46,8 @@ static int mvpp2_prs_hw_write(struct mvpp2 *priv, struct mvpp2_prs_entry *pe)
 }
 
 /* Initialize tcam entry from hw */
-static int mvpp2_prs_init_from_hw(struct mvpp2 *priv,
-				  struct mvpp2_prs_entry *pe, int tid)
+int mvpp2_prs_init_from_hw(struct mvpp2 *priv, struct mvpp2_prs_entry *pe,
+			   int tid)
 {
 	int i;
 
@@ -101,7 +101,7 @@ static void mvpp2_prs_shadow_ri_set(struct mvpp2 *priv, int index,
 }
 
 /* Update lookup field in tcam sw entry */
-static void mvpp2_prs_tcam_lu_set(struct mvpp2_prs_entry *pe, unsigned int lu)
+void mvpp2_prs_tcam_lu_set(struct mvpp2_prs_entry *pe, unsigned int lu)
 {
 	int enable_off = MVPP2_PRS_TCAM_EN_OFFS(MVPP2_PRS_TCAM_LU_BYTE);
 
@@ -122,8 +122,7 @@ static void mvpp2_prs_tcam_port_set(struct mvpp2_prs_entry *pe,
 }
 
 /* Update port map in tcam sw entry */
-static void mvpp2_prs_tcam_port_map_set(struct mvpp2_prs_entry *pe,
-					unsigned int ports)
+void mvpp2_prs_tcam_port_map_set(struct mvpp2_prs_entry *pe, unsigned int ports)
 {
 	unsigned char port_mask = MVPP2_PRS_PORT_MASK;
 	int enable_off = MVPP2_PRS_TCAM_EN_OFFS(MVPP2_PRS_TCAM_PORT_BYTE);
@@ -134,7 +133,7 @@ static void mvpp2_prs_tcam_port_map_set(struct mvpp2_prs_entry *pe,
 }
 
 /* Obtain port map from tcam sw entry */
-static unsigned int mvpp2_prs_tcam_port_map_get(struct mvpp2_prs_entry *pe)
+unsigned int mvpp2_prs_tcam_port_map_get(struct mvpp2_prs_entry *pe)
 {
 	int enable_off = MVPP2_PRS_TCAM_EN_OFFS(MVPP2_PRS_TCAM_PORT_BYTE);
 
@@ -142,18 +141,18 @@ static unsigned int mvpp2_prs_tcam_port_map_get(struct mvpp2_prs_entry *pe)
 }
 
 /* Set byte of data and its enable bits in tcam sw entry */
-static void mvpp2_prs_tcam_data_byte_set(struct mvpp2_prs_entry *pe,
-					 unsigned int offs, unsigned char byte,
-					 unsigned char enable)
+void mvpp2_prs_tcam_data_byte_set(struct mvpp2_prs_entry *pe,
+				  unsigned int offs, unsigned char byte,
+				  unsigned char enable)
 {
 	pe->tcam.byte[MVPP2_PRS_TCAM_DATA_BYTE(offs)] = byte;
 	pe->tcam.byte[MVPP2_PRS_TCAM_DATA_BYTE_EN(offs)] = enable;
 }
 
 /* Get byte of data and its enable bits from tcam sw entry */
-static void mvpp2_prs_tcam_data_byte_get(struct mvpp2_prs_entry *pe,
-					 unsigned int offs, unsigned char *byte,
-					 unsigned char *enable)
+void mvpp2_prs_tcam_data_byte_get(struct mvpp2_prs_entry *pe,
+				  unsigned int offs, unsigned char *byte,
+				  unsigned char *enable)
 {
 	*byte = pe->tcam.byte[MVPP2_PRS_TCAM_DATA_BYTE(offs)];
 	*enable = pe->tcam.byte[MVPP2_PRS_TCAM_DATA_BYTE_EN(offs)];
@@ -291,8 +290,7 @@ static int mvpp2_prs_sram_ai_get(struct mvpp2_prs_entry *pe)
 /* In sram sw entry set lookup ID field of the tcam key to be used in the next
  * lookup interation
  */
-static void mvpp2_prs_sram_next_lu_set(struct mvpp2_prs_entry *pe,
-				       unsigned int lu)
+void mvpp2_prs_sram_next_lu_set(struct mvpp2_prs_entry *pe, unsigned int lu)
 {
 	int sram_next_off = MVPP2_PRS_SRAM_NEXT_LU_OFFS;
 
