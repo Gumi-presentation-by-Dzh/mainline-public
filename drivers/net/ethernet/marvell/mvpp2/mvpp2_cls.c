@@ -325,8 +325,15 @@ static struct mvpp2_cls_flow cls_flows[MVPP2_N_FLOWS] = {
 		       0, 0),
 };
 
-static void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
-				struct mvpp2_cls_flow_entry *fe)
+u32 mvpp2_cls_flow_hits(struct mvpp2 *priv, int index)
+{
+	mvpp2_write(priv, MVPP2_CTRS_IDX, index);
+
+	return mvpp2_read(priv, MVPP2_CLS_FLOW_TBL_HIT_CTR);
+}
+
+void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
+			 struct mvpp2_cls_flow_entry *fe)
 {
 	fe->index = index;
 	mvpp2_write(priv, MVPP2_CLS_FLOW_INDEX_REG, index);
@@ -343,6 +350,25 @@ static void mvpp2_cls_flow_write(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP2_CLS_FLOW_TBL0_REG,  fe->data[0]);
 	mvpp2_write(priv, MVPP2_CLS_FLOW_TBL1_REG,  fe->data[1]);
 	mvpp2_write(priv, MVPP2_CLS_FLOW_TBL2_REG,  fe->data[2]);
+}
+
+u32 mvpp2_cls_lookup_hits(struct mvpp2 *priv, int index)
+{
+	mvpp2_write(priv, MVPP2_CTRS_IDX, index);
+
+	return mvpp2_read(priv, MVPP2_CLS_DEC_TBL_HIT_CTR);
+}
+
+void mvpp2_cls_lookup_read(struct mvpp2 *priv, int lkpid, int way,
+			   struct mvpp2_cls_lookup_entry *le)
+{
+	u32 val;
+
+	val = (way << MVPP2_CLS_LKP_INDEX_WAY_OFFS) | lkpid;
+	mvpp2_write(priv, MVPP2_CLS_LKP_INDEX_REG, val);
+	le->way = way;
+	le->lkpid = lkpid;
+	le->data = mvpp2_read(priv, MVPP2_CLS_LKP_TBL_REG);
 }
 
 /* Update classification lookup table register */
@@ -389,6 +415,12 @@ static void mvpp2_cls_flow_eng_set(struct mvpp2_cls_flow_entry *fe,
 {
 	fe->data[0] &= ~MVPP2_CLS_FLOW_TBL0_ENG(MVPP2_CLS_FLOW_TBL0_ENG_MASK);
 	fe->data[0] |= MVPP2_CLS_FLOW_TBL0_ENG(engine);
+}
+
+int mvpp2_cls_flow_eng_get(struct mvpp2_cls_flow_entry *fe)
+{
+	return (fe->data[0] >> MVPP2_CLS_FLOW_TBL0_OFFS) &
+		MVPP2_CLS_FLOW_TBL0_ENG_MASK;
 }
 
 static void mvpp2_cls_flow_port_id_sel(struct mvpp2_cls_flow_entry *fe,
@@ -728,8 +760,8 @@ static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP22_CLS_C2_ATTR3, c2->attr[3]);
 }
 
-static void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
-			      struct mvpp2_cls_c2_entry *c2)
+void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
+		       struct mvpp2_cls_c2_entry *c2)
 {
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, index);
 
@@ -842,6 +874,13 @@ void mvpp2_cls_port_config(struct mvpp2_port *port)
 	mvpp2_cls_lookup_write(port->priv, &le);
 
 	mvpp2_port_c2_cls_init(port);
+}
+
+u32 mvpp2_cls_c2_hit_count(struct mvpp2 *priv, int c2_index)
+{
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, c2_index);
+
+	return mvpp2_read(priv, MVPP22_CLS_C2_HIT_CTR);
 }
 
 static void mvpp2_rss_port_c2_enable(struct mvpp2_port *port)
