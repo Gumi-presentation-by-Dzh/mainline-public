@@ -14,25 +14,6 @@
 #include "mvpp2_cls.h"
 #include "mvpp2_prs.h"
 
-struct mvpp2_cls_flow {
-	/* The L2-L4 traffic flow type */
-	int flow_type;
-
-	/* The first id in the flow table for this flow */
-	u16 flow_id;
-
-	/* The supported HEK fields for this flow */
-	u16 supported_hash_opts;
-
-	/* The Header Parser result_info that matches this flow */
-	struct mvpp2_prs_result_info prs_ri;
-};
-
-#define MVPP2_ENTRIES_PER_FLOW			(MVPP2_MAX_PORTS + 1)
-#define MVPP2_FLOW_C2_ENTRY(id)			((id) * MVPP2_ENTRIES_PER_FLOW)
-#define MVPP2_PORT_FLOW_HASH_ENTRY(port, id)	((id) * MVPP2_ENTRIES_PER_FLOW + \
-						(port) + 1)
-
 #define MVPP2_DEF_FLOW(_type, _id, _opts, _ri, _ri_mask)	\
 {								\
 	.flow_type = _type, 					\
@@ -44,7 +25,7 @@ struct mvpp2_cls_flow {
 	}							\
 }
 
-static struct mvpp2_cls_flow cls_flows[] = {
+static struct mvpp2_cls_flow cls_flows[MVPP2_N_FLOWS] = {
 
 	/* TCP over IPv4 flows, Not fragmented, no vlan tag */
 	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_UNTAG,
@@ -363,8 +344,15 @@ static struct mvpp2_cls_flow cls_flows[] = {
 
 };
 
-static void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
-				struct mvpp2_cls_flow_entry *fe)
+u32 mvpp2_cls_flow_hits(struct mvpp2 *priv, int index)
+{
+	mvpp2_write(priv, MVPP2_CTRS_IDX, index);
+
+	return mvpp2_read(priv, MVPP2_CLS_FLOW_TBL_HIT_CTR);
+}
+
+void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
+			 struct mvpp2_cls_flow_entry *fe)
 {
 	fe->index = index;
 	mvpp2_write(priv, MVPP2_CLS_FLOW_INDEX_REG, index);
@@ -383,8 +371,15 @@ static void mvpp2_cls_flow_write(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP2_CLS_FLOW_TBL2_REG,  fe->data[2]);
 }
 
-static void mvpp2_cls_lookup_read(struct mvpp2 *priv, int lkpid, int way,
-				  struct mvpp2_cls_lookup_entry *le)
+u32 mvpp2_cls_lookup_hits(struct mvpp2 *priv, int index)
+{
+	mvpp2_write(priv, MVPP2_CTRS_IDX, index);
+
+	return mvpp2_read(priv, MVPP2_CLS_DEC_TBL_HIT_CTR);
+}
+
+void mvpp2_cls_lookup_read(struct mvpp2 *priv, int lkpid, int way,
+			   struct mvpp2_cls_lookup_entry *le)
 {
 	u32 val;
 
@@ -439,6 +434,12 @@ static void mvpp2_cls_sw_flow_eng_set(struct mvpp2_cls_flow_entry *fe,
 {
 	fe->data[0] &= ~MVPP2_CLS_FLOW_TBL0_ENG(MVPP2_CLS_FLOW_TBL0_ENG_MASK);
 	fe->data[0] |= MVPP2_CLS_FLOW_TBL0_ENG(engine);
+}
+
+int mvpp2_cls_sw_flow_eng_get(struct mvpp2_cls_flow_entry *fe)
+{
+	return (fe->data[0] >> MVPP2_CLS_FLOW_TBL0_OFFS) &
+		MVPP2_CLS_FLOW_TBL0_ENG_MASK;
 }
 
 static void mvpp2_cls_sw_flow_port_id_sel(struct mvpp2_cls_flow_entry *fe,
@@ -603,6 +604,14 @@ static int mvpp2_flow_set_hek_fields(struct mvpp2_cls_flow_entry *fe,
 	return 0;
 }
 
+struct mvpp2_cls_flow *mvpp2_cls_flow_get(int flow)
+{
+	if (flow >= MVPP2_N_FLOWS)
+		return NULL;
+
+	return &cls_flows[flow];
+}
+
 /* Set the hash generation options for the given traffic flow.
  * One traffic flow (in the ethtool sense) has multiple classification flows,
  * to handle specific cases such as fragmentation, or the presence of a
@@ -615,15 +624,17 @@ static int mvpp2_flow_set_hek_fields(struct mvpp2_cls_flow_entry *fe,
  *
  */
 static int mvpp2_port_rss_hash_opts_set(struct mvpp2_port *port, int flow_type,
-					 u16 requested_opts)
+					u16 requested_opts)
 {
 	struct mvpp2_cls_flow_entry fe;
 	struct mvpp2_cls_flow *flow;
 	int i, engine, flow_index;
 	u16 hash_opts;
 
-	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
-		flow = &cls_flows[i];
+	for (i = 0; i < MVPP2_N_FLOWS; i++) {
+		flow = mvpp2_cls_flow_get(i);
+		if (!flow)
+			return -EINVAL;
 
 		if (flow->flow_type != flow_type)
 			continue;
@@ -652,18 +663,42 @@ static int mvpp2_port_rss_hash_opts_set(struct mvpp2_port *port, int flow_type,
 	return 0;
 }
 
-static inline u16 mvpp2_field_get_opt(enum mvpp2_cls_field_id field_id)
+u16 mvpp2_flow_get_hek_fields(struct mvpp2_cls_flow_entry *fe)
 {
-	switch (field_id) {
-		case MVPP22_CLS_FIELD_VLAN: return MVPP22_CLS_HEK_OPT_VLAN;
-		case MVPP22_CLS_FIELD_IP4SA: return MVPP22_CLS_HEK_OPT_IP4SA;
-		case MVPP22_CLS_FIELD_IP4DA: return MVPP22_CLS_HEK_OPT_IP4DA;
-		case MVPP22_CLS_FIELD_IP6SA: return MVPP22_CLS_HEK_OPT_IP6SA;
-		case MVPP22_CLS_FIELD_IP6DA: return MVPP22_CLS_HEK_OPT_IP6DA;
-		case MVPP22_CLS_FIELD_L4SIP: return MVPP22_CLS_HEK_OPT_L4SIP;
-		case MVPP22_CLS_FIELD_L4DIP: return MVPP22_CLS_HEK_OPT_L4DIP;
-		default: return 0;
+	u16 hash_opts = 0;
+	int n_fields, i, field;
+
+	n_fields = mvpp2_cls_sw_flow_hek_num_get(fe);
+
+	for (i = 0; i < n_fields; i++) {
+		field = mvpp2_cls_sw_flow_hek_get(fe, i);
+
+		switch (field) {
+		case MVPP22_CLS_FIELD_VLAN:
+			hash_opts |= MVPP22_CLS_HEK_OPT_VLAN;
+			break;
+		case MVPP22_CLS_FIELD_IP4SA:
+			hash_opts |= MVPP22_CLS_HEK_OPT_IP4SA;
+			break;
+		case MVPP22_CLS_FIELD_IP4DA:
+			hash_opts |= MVPP22_CLS_HEK_OPT_IP4DA;
+			break;
+		case MVPP22_CLS_FIELD_IP6SA:
+			hash_opts |= MVPP22_CLS_HEK_OPT_IP6SA;
+			break;
+		case MVPP22_CLS_FIELD_IP6DA:
+			hash_opts |= MVPP22_CLS_HEK_OPT_IP6DA;
+			break;
+		case MVPP22_CLS_FIELD_L4SIP:
+			hash_opts |= MVPP22_CLS_HEK_OPT_L4SIP;
+			break;
+		case MVPP22_CLS_FIELD_L4DIP:
+			hash_opts |= MVPP22_CLS_HEK_OPT_L4DIP;
+			break;
+		default: break;
+		}
 	}
+	return hash_opts;
 }
 
 /* Returns the hash opts for this flow. This there are several classifier flows
@@ -671,13 +706,15 @@ static inline u16 mvpp2_field_get_opt(enum mvpp2_cls_field_id field_id)
  */
 static u16 mvpp2_port_rss_hash_opts_get(struct mvpp2_port *port, int flow_type)
 {
-	int i, flow_index, f, n_fields, field;
 	struct mvpp2_cls_flow_entry fe;
 	struct mvpp2_cls_flow *flow;
+	int i, flow_index;
 	u16 hash_opts = 0;
 
-	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
-		flow = &cls_flows[i];
+	for (i = 0; i < MVPP2_N_FLOWS; i++) {
+		flow = mvpp2_cls_flow_get(i);
+		if (!flow)
+			return 0;
 
 		if (flow->flow_type != flow_type)
 			continue;
@@ -687,12 +724,7 @@ static u16 mvpp2_port_rss_hash_opts_get(struct mvpp2_port *port, int flow_type)
 
 		mvpp2_cls_flow_read(port->priv, flow_index, &fe);
 
-		n_fields = mvpp2_cls_sw_flow_hek_num_get(&fe);
-
-		for (f = 0; f < n_fields; f++) {
-			field = mvpp2_cls_sw_flow_hek_get(&fe, i);
-			hash_opts |= mvpp2_field_get_opt(field);
-		}
+		hash_opts |= mvpp2_flow_get_hek_fields(&fe);
 	}
 
 	return hash_opts;
@@ -703,8 +735,10 @@ static void mvpp2_port_rss_init_flows(struct mvpp2 *priv)
 	struct mvpp2_cls_flow *flow;
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
-		flow = &cls_flows[i];
+	for (i = 0; i < MVPP2_N_FLOWS; i++) {
+		flow = mvpp2_cls_flow_get(i);
+		if (!flow)
+			break;
 
 		mvpp2_rss_flow_prs_init(priv, flow);
 		mvpp2_rss_flow_lkp_init(priv, flow);
@@ -770,6 +804,13 @@ void mvpp2_cls_port_config(struct mvpp2_port *port)
 	mvpp2_cls_lookup_write(port->priv, &le);
 }
 
+u32 mvpp2_cls_c2_hit_count(struct mvpp2 *priv, int c2_index)
+{
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, c2_index);
+
+	return mvpp2_read(priv, MVPP22_CLS_C2_HIT_CTR);
+}
+
 static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 			       struct mvpp2_cls_c2_entry *c2)
 {
@@ -790,8 +831,8 @@ static void mvpp2_cls_c2_write(struct mvpp2 *priv,
 	mvpp2_write(priv, MVPP22_CLS_C2_ATTR3, c2->attr[3]);
 }
 
-static void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
-			      struct mvpp2_cls_c2_entry *c2)
+void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
+		       struct mvpp2_cls_c2_entry *c2)
 {
 	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, index);
 
@@ -920,7 +961,8 @@ void mvpp22_rss_fill_table(struct mvpp2_port *port, u32 table)
 	}
 }
 
-int mvpp2_rss_set_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
+int mvpp2_rss_flow_hash_opts_set(struct mvpp2_port *port,
+				 struct ethtool_rxnfc *info)
 {
 	u16 hash_opts = 0;
 
@@ -950,7 +992,8 @@ int mvpp2_rss_set_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
 	return mvpp2_port_rss_hash_opts_set(port, info->flow_type, hash_opts);
 }
 
-int mvpp2_rss_get_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
+int mvpp2_rss_flow_hash_opts_get(struct mvpp2_port *port,
+				 struct ethtool_rxnfc *info)
 {
 	long unsigned int hash_opts;
 	int i;

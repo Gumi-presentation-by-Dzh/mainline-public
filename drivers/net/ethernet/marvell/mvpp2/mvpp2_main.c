@@ -3840,7 +3840,7 @@ static int mvpp2_ethtool_get_rxnfc(struct net_device *dev,
 
 	switch (info->cmd) {
 	case ETHTOOL_GRXFH:
-		ret = mvpp2_rss_get_flow(port, info);
+		ret = mvpp2_rss_flow_hash_opts_get(port, info);
 		break;
 	case ETHTOOL_GRXRINGS:
 		info->data = port->nrxqs;
@@ -3863,7 +3863,7 @@ static int mvpp2_ethtool_set_rxnfc(struct net_device *dev,
 
 	switch (info->cmd) {
 	case ETHTOOL_SRXFH:
-		ret = mvpp2_rss_set_flow(port, info);
+		ret = mvpp2_rss_flow_hash_opts_set(port, info);
 		break;
 	default:
 		return -EOPNOTSUPP;

@@ -95,7 +95,8 @@
 #define MVPP2_CLS_FLOW_TBL0_REG			0x1824
 #define     MVPP2_CLS_FLOW_TBL0_LAST		BIT(0)
 #define     MVPP2_CLS_FLOW_TBL0_ENG_MASK	0x7
-#define     MVPP2_CLS_FLOW_TBL0_ENG(x)		((x) << 1)
+#define     MVPP2_CLS_FLOW_TBL0_OFFS		1
+#define     MVPP2_CLS_FLOW_TBL0_ENG(x)		((x) << MVPP2_CLS_FLOW_TBL0_OFFS)
 #define     MVPP2_CLS_FLOW_TBL0_PORT_ID_MASK	0xff
 #define     MVPP2_CLS_FLOW_TBL0_PORT_ID(port)	((port) << 4)
 #define     MVPP2_CLS_FLOW_TBL0_PORT_ID_SEL	BIT(23)
@@ -126,6 +127,7 @@
 #define MVPP22_CLS_C2_TCAM_DATA4		0x1b20
 #define     MVPP22_CLS_C2_PORT_ID_MASK		GENMASK(15, 8)
 #define     MVPP22_CLS_C2_PORT_ID(port)		((port) << 8)
+#define MVPP22_CLS_C2_HIT_CTR			0x1b50
 #define MVPP22_CLS_C2_ACT			0x1b60
 #define     MVPP22_CLS_C2_ACT_RSS_EN_MASK	GENMASK(20, 19)
 #define     MVPP22_CLS_C2_ACT_RSS_EN(act)	((act) << 19)
@@ -137,9 +139,11 @@
 #define     MVPP22_CLS_C2_ACT_QLOW(act)		((act) << 9)
 #define MVPP22_CLS_C2_ATTR0			0x1b64
 #define     MVPP22_CLS_C2_ATTR0_QHIGH_MASK	0x1f
-#define     MVPP22_CLS_C2_ATTR0_QHIGH(qh)	((qh) << 24)
+#define     MVPP22_CLS_C2_ATTR0_QHIGH_OFFS	24
+#define     MVPP22_CLS_C2_ATTR0_QHIGH(qh)	((qh) << MVPP22_CLS_C2_ATTR0_QHIGH_OFFS)
 #define     MVPP22_CLS_C2_ATTR0_QLOW_MASK	0x7
-#define     MVPP22_CLS_C2_ATTR0_QLOW(ql)	((ql) << 21)
+#define     MVPP22_CLS_C2_ATTR0_QLOW_OFFS	21
+#define     MVPP22_CLS_C2_ATTR0_QLOW(ql)	((ql) << MVPP22_CLS_C2_ATTR0_QLOW_OFFS)
 #define MVPP22_CLS_C2_ATTR1			0x1b68
 #define MVPP22_CLS_C2_ATTR2			0x1b6c
 #define     MVPP22_CLS_C2_ATTR2_RSS_EN		BIT(30)
@@ -321,6 +325,11 @@
 #define     MVPP22_BM_ADDR_HIGH_PHYS_RLS_MASK	0xff
 #define     MVPP22_BM_ADDR_HIGH_VIRT_RLS_MASK	0xff00
 #define     MVPP22_BM_ADDR_HIGH_VIRT_RLS_SHIFT	8
+
+/* Hit counters registers */
+#define MVPP2_CTRS_IDX				0x7040
+#define MVPP2_CLS_DEC_TBL_HIT_CTR		0x7700
+#define MVPP2_CLS_FLOW_TBL_HIT_CTR		0x7704
 
 /* TX Scheduler registers */
 #define MVPP2_TXP_SCHED_PORT_INDEX_REG		0x8000
