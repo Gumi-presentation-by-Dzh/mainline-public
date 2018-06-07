@@ -2448,13 +2448,12 @@ int mvpp2_prs_add_flow(struct mvpp2 *priv, int flow, u32 ri, u32 ri_mask)
 	mvpp2_prs_sram_ai_update(&pe, flow, MVPP2_PRS_FLOW_ID_MASK);
 	mvpp2_prs_sram_bits_set(&pe, MVPP2_PRS_SRAM_LU_DONE_BIT, 1);
 
-	mvpp2_prs_shadow_set(priv, pe.index, MVPP2_PRS_LU_FLOWS);
-
 	for (i = 0; i < 4; i++) {
-		mvpp2_prs_tcam_data_byte_set(&pe, 0, ri_byte[i],
-					     ri_byte_mask[i]);
+		mvpp2_prs_tcam_data_byte_set(&pe, i, ri_byte[i],
+						ri_byte_mask[i]);
 	}
 
+	mvpp2_prs_shadow_set(priv, pe.index, MVPP2_PRS_LU_FLOWS);
 	mvpp2_prs_tcam_lu_set(&pe, MVPP2_PRS_LU_FLOWS);
 	mvpp2_prs_tcam_port_map_set(&pe, MVPP2_PRS_PORT_MASK);
 	mvpp2_prs_hw_write(priv, &pe);

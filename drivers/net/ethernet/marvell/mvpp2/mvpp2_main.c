@@ -3371,11 +3371,6 @@ static int mvpp2_open(struct net_device *dev)
 
 	mvpp2_start_dev(port);
 
-	/* Enable RSS */
-	if (mvpp22_rss_is_supported()) {
-		dev->features |= NETIF_F_RXHASH;
-		mvpp22_rss_enable(port);
-	}
 
 	/* Start hardware statistics gathering */
 	queue_delayed_work(priv->stats_queue, &port->stats_work,
@@ -3889,7 +3884,7 @@ static int mvpp2_ethtool_get_rxfh(struct net_device *dev, u32 *indir, u8 *key,
 		       ARRAY_SIZE(port->indir) * sizeof(port->indir[0]));
 
 	if (hfunc)
-		*hfunc = ETH_RSS_HASH_TOP;
+		*hfunc = ETH_RSS_HASH_CRC32;
 
 	return 0;
 }
@@ -3902,11 +3897,11 @@ static int mvpp2_ethtool_set_rxfh(struct net_device *dev, const u32 *indir,
 	if (!mvpp22_rss_is_supported())
 		return -EOPNOTSUPP;
 
-	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_TOP)
-		return -ENOTSUPP;
+	if (hfunc != ETH_RSS_HASH_NO_CHANGE && hfunc != ETH_RSS_HASH_CRC32)
+		return -EOPNOTSUPP;
 
 	if (key)
-		return -ENOTSUPP;
+		return -EOPNOTSUPP;
 
 	if (indir) {
 		memcpy(port->indir, indir,
@@ -4792,8 +4787,11 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	dev->hw_features |= features | NETIF_F_RXCSUM | NETIF_F_GRO |
 			    NETIF_F_HW_VLAN_CTAG_FILTER;
 
-	if (mvpp22_rss_is_supported())
+	if (mvpp22_rss_is_supported()) {
+		dev->features |= NETIF_F_RXHASH;
 		dev->hw_features |= NETIF_F_RXHASH;
+		mvpp22_rss_enable(port);
+	}
 
 	if (port->pool_long->id == MVPP2_BM_JUMBO && port->id != 0) {
 		dev->features &= ~(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM);

@@ -30,9 +30,17 @@ struct mvpp2_dbgfs_port_flow_entry {
 static int mvpp2_dbgfs_flow_flt_hits_show(struct seq_file *s, void *unused)
 {
 	struct mvpp2_dbgfs_flow_entry *entry = s->private;
-	int id = MVPP2_FLOW_C2_ENTRY(entry->flow);
+	struct mvpp2_cls_flow *f;
+	u32 hits;
+	int id;
 
-	u32 hits = mvpp2_cls_flow_hits(entry->priv, id);
+	f = mvpp2_cls_flow_get(entry->flow);
+	if (!f)
+		return -EINVAL;
+
+	id = MVPP2_FLOW_C2_ENTRY(f->flow_id);
+
+	hits = mvpp2_cls_flow_hits(entry->priv, id);
 
 	seq_printf(s, "%u\n", hits);
 
@@ -44,8 +52,14 @@ DEFINE_SHOW_ATTRIBUTE(mvpp2_dbgfs_flow_flt_hits);
 static int mvpp2_dbgfs_flow_dec_hits_show(struct seq_file *s, void *unused)
 {
 	struct mvpp2_dbgfs_flow_entry *entry = s->private;
+	struct mvpp2_cls_flow *f;
+	u32 hits;
 
-	u32 hits = mvpp2_cls_lookup_hits(entry->priv, entry->flow);
+	f = mvpp2_cls_flow_get(entry->flow);
+	if (!f)
+		return -EINVAL;
+
+	hits = mvpp2_cls_lookup_hits(entry->priv, f->flow_id);
 
 	seq_printf(s, "%u\n", hits);
 
