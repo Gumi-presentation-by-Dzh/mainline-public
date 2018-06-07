@@ -12,6 +12,356 @@
 
 #include "mvpp2.h"
 #include "mvpp2_cls.h"
+#include "mvpp2_prs.h"
+
+struct mvpp2_cls_flow {
+	/* The L2-L4 traffic flow type */
+	int flow_type;
+
+	/* The first id in the flow table for this flow */
+	u16 flow_id;
+
+	/* The supported HEK fields for this flow */
+	u16 supported_hash_opts;
+
+	/* The Header Parser result_info that matches this flow */
+	struct mvpp2_prs_result_info prs_ri;
+};
+
+#define MVPP2_ENTRIES_PER_FLOW			(MVPP2_MAX_PORTS + 1)
+#define MVPP2_FLOW_C2_ENTRY(id)			((id) * MVPP2_ENTRIES_PER_FLOW)
+#define MVPP2_PORT_FLOW_HASH_ENTRY(port, id)	((id) * MVPP2_ENTRIES_PER_FLOW + \
+						(port) + 1)
+
+#define MVPP2_DEF_FLOW(_type, _id, _opts, _ri, _ri_mask)	\
+{								\
+	.flow_type = _type, 					\
+	.flow_id = _id,						\
+	.supported_hash_opts = _opts,				\
+	.prs_ri = {						\
+		.ri = _ri,					\
+		.ri_mask = _ri_mask				\
+	}							\
+}
+
+static struct mvpp2_cls_flow cls_flows[] = {
+
+	/* TCP over IPv4 flows, Not fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4 |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OPT |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OTHER |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* TCP over IPv4 flows, Not fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4 |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OPT |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_L3_IP4_OTHER |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* TCP over IPv4 flows, fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4 |
+		        MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OPT |
+		        MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OTHER |
+		        MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* TCP over IPv4 flows, fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4 |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OPT |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V4_FLOW, MVPP2_FL_IP4_TCP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OTHER |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* UDP over IPv4 flows, Not fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4 |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OPT |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OTHER |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* UDP over IPv4 flows, Not fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4 |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OPT |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_NF_TAG,
+		       MVPP22_CLS_HEK_IP4_5T,
+		       MVPP2_PRS_RI_L3_IP4_OTHER |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* UDP over IPv4 flows, fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4 |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OPT |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OTHER |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* UDP over IPv4 flows, fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4 |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OPT |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V4_FLOW, MVPP2_FL_IP4_UDP_FRAG_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OTHER |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* TCP over IPv6 flows, not fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6 |
+		        MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6_EXT |
+		        MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* TCP over IPv6 flows, not fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6 |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6_EXT |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* TCP over IPv6 flows, fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6 |
+		       MVPP2_PRS_RI_IP_FRAG_TRUE | MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6_EXT |
+		       MVPP2_PRS_RI_IP_FRAG_TRUE | MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* TCP over IPv6 flows, fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6 | MVPP2_PRS_RI_IP_FRAG_TRUE |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(TCP_V6_FLOW, MVPP2_FL_IP6_TCP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6_EXT | MVPP2_PRS_RI_IP_FRAG_TRUE |
+		       MVPP2_PRS_RI_L4_TCP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* UDP over IPv6 flows, not fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6 |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6_EXT |
+		        MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* UDP over IPv6 flows, not fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6 |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_NF_UNTAG,
+		       MVPP22_CLS_HEK_IP6_5T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6_EXT |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* UDP over IPv6 flows, fragmented, no vlan tag */
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6 |
+		       MVPP2_PRS_RI_IP_FRAG_TRUE | MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6_EXT |
+		       MVPP2_PRS_RI_IP_FRAG_TRUE | MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK | MVPP2_PRS_RI_VLAN_MASK),
+
+	/* UDP over IPv6 flows, fragmented, with vlan tag */
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6 | MVPP2_PRS_RI_IP_FRAG_TRUE |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	MVPP2_DEF_FLOW(UDP_V6_FLOW, MVPP2_FL_IP6_UDP_FRAG_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP6_EXT | MVPP2_PRS_RI_IP_FRAG_TRUE |
+		       MVPP2_PRS_RI_L4_UDP,
+		       MVPP2_PRS_IP_MASK),
+
+	/* IPv4 flows, no vlan tag */
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4,
+		       MVPP2_PRS_RI_VLAN_MASK | MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OPT,
+		       MVPP2_PRS_RI_VLAN_MASK | MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_UNTAG,
+		       MVPP22_CLS_HEK_IP4_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP4_OTHER,
+		       MVPP2_PRS_RI_VLAN_MASK | MVPP2_PRS_RI_L3_PROTO_MASK),
+
+	/* IPv4 flows, with vlan tag */
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4,
+		       MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OPT,
+		       MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV4_FLOW, MVPP2_FL_IP4_TAG,
+		       MVPP22_CLS_HEK_IP4_2T | MVPP22_CLS_HEK_OPT_VLAN,
+		       MVPP2_PRS_RI_L3_IP4_OTHER,
+		       MVPP2_PRS_RI_L3_PROTO_MASK),
+
+	/* IPv6 flows, no vlan tag */
+	MVPP2_DEF_FLOW(IPV6_FLOW, MVPP2_FL_IP6_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6,
+		       MVPP2_PRS_RI_VLAN_MASK | MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV6_FLOW, MVPP2_FL_IP6_UNTAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_VLAN_NONE | MVPP2_PRS_RI_L3_IP6,
+		       MVPP2_PRS_RI_VLAN_MASK | MVPP2_PRS_RI_L3_PROTO_MASK),
+
+	/* IPv6 flows, with vlan tag */
+	MVPP2_DEF_FLOW(IPV6_FLOW, MVPP2_FL_IP6_TAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_L3_IP6,
+		       MVPP2_PRS_RI_L3_PROTO_MASK),
+	MVPP2_DEF_FLOW(IPV6_FLOW, MVPP2_FL_IP6_TAG,
+		       MVPP22_CLS_HEK_IP6_2T,
+		       MVPP2_PRS_RI_L3_IP6,
+		       MVPP2_PRS_RI_L3_PROTO_MASK),
+
+	/* Non IP flow, no vlan tag */
+	MVPP2_DEF_FLOW(ETHER_FLOW, MVPP2_FL_NON_IP_UNTAG,
+		       0,
+		       MVPP2_PRS_RI_VLAN_NONE,
+		       MVPP2_PRS_RI_VLAN_MASK),
+	MVPP2_DEF_FLOW(ETHER_FLOW, MVPP2_FL_NON_IP_TAG,
+		       MVPP22_CLS_HEK_OPT_VLAN,
+		       0,
+		       0),
+/* Non IP flow, with vlan tag */
+
+};
 
 static void mvpp2_cls_flow_read(struct mvpp2 *priv, int index,
 				struct mvpp2_cls_flow_entry *fe)
@@ -125,6 +475,244 @@ static void mvpp2_cls_sw_flow_port_add(struct mvpp2_cls_flow_entry *fe,
 	fe->data[0] |= MVPP2_CLS_FLOW_TBL0_PORT_ID(port);
 }
 
+/* Initialize the parser entry for the given flow */
+static void mvpp2_rss_flow_prs_init(struct mvpp2 *priv,
+				    struct mvpp2_cls_flow *flow)
+{
+	mvpp2_prs_add_flow(priv, flow->flow_id, flow->prs_ri.ri,
+			   flow->prs_ri.ri_mask);
+}
+
+/* Initialize the Lookup Id table entry for the given flow */
+static void mvpp2_rss_flow_lkp_init(struct mvpp2 *priv,
+				    struct mvpp2_cls_flow *flow)
+{
+	struct mvpp2_cls_lookup_entry le;
+
+	le.way = 0;
+	le.lkpid = flow->flow_id;
+
+	/* The default RxQ for this port is set in the C2 lookup */
+	le.data = 0;
+
+	/* We point on the first lookup in the sequence for the flow, that is
+	 * the C2 lookup.
+	 */
+	le.data |= MVPP2_CLS_LKP_FLOW_PTR(MVPP2_FLOW_C2_ENTRY(flow->flow_id));
+
+	/* CLS is always enabled, RSS is enabled/disabled in C2 lookup */
+	le.data |= MVPP2_CLS_LKP_TBL_LOOKUP_EN_MASK;
+
+	mvpp2_cls_lookup_write(priv, &le);
+}
+
+/* Initialize the flow table entries for the given flow */
+static void mvpp2_rss_flow_init(struct mvpp2 *priv, struct mvpp2_cls_flow *flow)
+{
+	struct mvpp2_cls_flow_entry fe;
+	int i;
+
+	/* The classification sequence for a given flow is composed of a C2
+	 * lookup to set the default RxQ, enable or disable RSS on this port,
+	 * and one C3Hx lookup per port containing hash parameters.
+	 */
+
+	/* C2 lookup */
+	memset(&fe, 0, sizeof(fe));
+	fe.index = MVPP2_FLOW_C2_ENTRY(flow->flow_id);
+
+	mvpp2_cls_sw_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C2);
+	mvpp2_cls_sw_flow_port_id_sel(&fe, true);
+	mvpp2_cls_sw_flow_last_set(&fe, 0);
+	mvpp2_cls_sw_flow_pri_set(&fe, 0);
+	mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_FIRST1);
+
+	/* Add all ports */
+	for (i = 0; i < MVPP2_MAX_PORTS; i++)
+		mvpp2_cls_sw_flow_port_add(&fe, BIT(i));
+
+	mvpp2_cls_flow_write(priv, &fe);
+
+	/* C3Hx lookups */
+	for (i = 0; i < MVPP2_MAX_PORTS; i++) {
+		memset(&fe, 0, sizeof(fe));
+		fe.index = MVPP2_PORT_FLOW_HASH_ENTRY(i, flow->flow_id);
+
+		mvpp2_cls_sw_flow_port_id_sel(&fe, true);
+		mvpp2_cls_sw_flow_last_set(&fe, 1);
+		mvpp2_cls_sw_flow_pri_set(&fe, 1);
+		mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_LAST);
+		mvpp2_cls_sw_flow_port_add(&fe, BIT(i));
+
+		mvpp2_cls_flow_write(priv, &fe);
+	}
+}
+
+/* Adds a field to the Header Extracted Key generation parameters*/
+static int mvpp2_flow_add_hek_field(struct mvpp2_cls_flow_entry *fe,
+				    u32 field_id)
+{
+	int nb_fields = mvpp2_cls_sw_flow_hek_num_get(fe);
+
+	if (nb_fields == MVPP2_FLOW_N_FIELDS)
+		return -EINVAL;
+
+	mvpp2_cls_sw_flow_hek_set(fe, nb_fields, field_id);
+
+	mvpp2_cls_sw_flow_hek_num_set(fe, nb_fields + 1);
+
+	return 0;
+}
+
+static int mvpp2_flow_set_hek_fields(struct mvpp2_cls_flow_entry *fe,
+				     long unsigned int hash_opts)
+{
+	u32 field_id;
+	int i;
+
+	for_each_set_bit(i, &hash_opts, MVPP22_CLS_HEK_N_FIELDS) {
+		switch (BIT(i)) {
+		case MVPP22_CLS_HEK_OPT_VLAN:
+			field_id = MVPP22_CLS_FIELD_VLAN;
+			break;
+		case MVPP22_CLS_HEK_OPT_IP4SA:
+			field_id = MVPP22_CLS_FIELD_IP4SA;
+			break;
+		case MVPP22_CLS_HEK_OPT_IP4DA:
+			field_id = MVPP22_CLS_FIELD_IP4DA;
+			break;
+		case MVPP22_CLS_HEK_OPT_IP6SA:
+			field_id = MVPP22_CLS_FIELD_IP6SA;
+			break;
+		case MVPP22_CLS_HEK_OPT_IP6DA:
+			field_id = MVPP22_CLS_FIELD_IP6DA;
+			break;
+		case MVPP22_CLS_HEK_OPT_L4SIP:
+			field_id = MVPP22_CLS_FIELD_L4SIP;
+			break;
+		case MVPP22_CLS_HEK_OPT_L4DIP:
+			field_id = MVPP22_CLS_FIELD_L4DIP;
+			break;
+		default:
+			return -EINVAL;
+		}
+		if (mvpp2_flow_add_hek_field(fe, field_id))
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+/* Set the hash generation options for the given traffic flow.
+ * One traffic flow (in the ethtool sense) has multiple classification flows,
+ * to handle specific cases such as fragmentation, or the presence of a
+ * VLAN / DSA Tag.
+ *
+ * Each of these individual flows has different constraints, for example we
+ * can't hash fragmented packets on L4 data (else we would risk having packet
+ * re-ordering), so each classification flows masks the options with their
+ * supported ones.
+ *
+ */
+static int mvpp2_port_rss_hash_opts_set(struct mvpp2_port *port, int flow_type,
+					 u16 requested_opts)
+{
+	struct mvpp2_cls_flow_entry fe;
+	struct mvpp2_cls_flow *flow;
+	int i, engine, flow_index;
+	u16 hash_opts;
+
+	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
+		flow = &cls_flows[i];
+
+		if (flow->flow_type != flow_type)
+			continue;
+
+		flow_index = MVPP2_PORT_FLOW_HASH_ENTRY(port->id,
+							flow->flow_id);
+
+		mvpp2_cls_flow_read(port->priv, flow_index, &fe);
+
+		hash_opts = flow->supported_hash_opts & requested_opts;
+
+		/* We need to use C3HB engine to access L4 infos */
+		if (hash_opts & MVPP22_CLS_HEK_L4_OPTS)
+			engine = MVPP22_CLS_ENGINE_C3HB;
+		else
+			engine = MVPP22_CLS_ENGINE_C3HA;
+
+		if (mvpp2_flow_set_hek_fields(&fe, hash_opts))
+			return -EINVAL;
+
+		mvpp2_cls_sw_flow_eng_set(&fe, engine);
+
+		mvpp2_cls_flow_write(port->priv, &fe);
+	}
+
+	return 0;
+}
+
+static inline u16 mvpp2_field_get_opt(enum mvpp2_cls_field_id field_id)
+{
+	switch (field_id) {
+		case MVPP22_CLS_FIELD_VLAN: return MVPP22_CLS_HEK_OPT_VLAN;
+		case MVPP22_CLS_FIELD_IP4SA: return MVPP22_CLS_HEK_OPT_IP4SA;
+		case MVPP22_CLS_FIELD_IP4DA: return MVPP22_CLS_HEK_OPT_IP4DA;
+		case MVPP22_CLS_FIELD_IP6SA: return MVPP22_CLS_HEK_OPT_IP6SA;
+		case MVPP22_CLS_FIELD_IP6DA: return MVPP22_CLS_HEK_OPT_IP6DA;
+		case MVPP22_CLS_FIELD_L4SIP: return MVPP22_CLS_HEK_OPT_L4SIP;
+		case MVPP22_CLS_FIELD_L4DIP: return MVPP22_CLS_HEK_OPT_L4DIP;
+		default: return 0;
+	}
+}
+
+/* Returns the hash opts for this flow. This there are several classifier flows
+ * for one traffic flow, this returns an aggregation of all configurations.
+ */
+static u16 mvpp2_port_rss_hash_opts_get(struct mvpp2_port *port, int flow_type)
+{
+	int i, flow_index, f, n_fields, field;
+	struct mvpp2_cls_flow_entry fe;
+	struct mvpp2_cls_flow *flow;
+	u16 hash_opts = 0;
+
+	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
+		flow = &cls_flows[i];
+
+		if (flow->flow_type != flow_type)
+			continue;
+
+		flow_index = MVPP2_PORT_FLOW_HASH_ENTRY(port->id,
+							flow->flow_id);
+
+		mvpp2_cls_flow_read(port->priv, flow_index, &fe);
+
+		n_fields = mvpp2_cls_sw_flow_hek_num_get(&fe);
+
+		for (f = 0; f < n_fields; f++) {
+			field = mvpp2_cls_sw_flow_hek_get(&fe, i);
+			hash_opts |= mvpp2_field_get_opt(field);
+		}
+	}
+
+	return hash_opts;
+}
+
+static void mvpp2_port_rss_init_flows(struct mvpp2 *priv)
+{
+	struct mvpp2_cls_flow *flow;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(cls_flows); i++) {
+		flow = &cls_flows[i];
+
+		mvpp2_rss_flow_prs_init(priv, flow);
+		mvpp2_rss_flow_lkp_init(priv, flow);
+		mvpp2_rss_flow_init(priv, flow);
+	}
+}
+
+
 /* Classifier default initialization */
 void mvpp2_cls_init(struct mvpp2 *priv)
 {
@@ -182,44 +770,110 @@ void mvpp2_cls_port_config(struct mvpp2_port *port)
 	mvpp2_cls_lookup_write(port->priv, &le);
 }
 
+static void mvpp2_cls_c2_write(struct mvpp2 *priv,
+			       struct mvpp2_cls_c2_entry *c2)
+{
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, c2->index);
+
+	/* Write TCAM */
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA0, c2->tcam[0]);
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA1, c2->tcam[1]);
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA2, c2->tcam[2]);
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA3, c2->tcam[3]);
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA4, c2->tcam[4]);
+
+	mvpp2_write(priv, MVPP22_CLS_C2_ACT, c2->act);
+
+	mvpp2_write(priv, MVPP22_CLS_C2_ATTR0, c2->attr[0]);
+	mvpp2_write(priv, MVPP22_CLS_C2_ATTR1, c2->attr[1]);
+	mvpp2_write(priv, MVPP22_CLS_C2_ATTR2, c2->attr[2]);
+	mvpp2_write(priv, MVPP22_CLS_C2_ATTR3, c2->attr[3]);
+}
+
+static void mvpp2_cls_c2_read(struct mvpp2 *priv, int index,
+			      struct mvpp2_cls_c2_entry *c2)
+{
+	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, index);
+
+	c2->index = index;
+
+	c2->tcam[0] = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_DATA0);
+	c2->tcam[1] = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_DATA1);
+	c2->tcam[2] = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_DATA2);
+	c2->tcam[3] = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_DATA3);
+	c2->tcam[4] = mvpp2_read(priv, MVPP22_CLS_C2_TCAM_DATA4);
+
+	c2->act = mvpp2_read(priv, MVPP22_CLS_C2_ACT);
+
+	c2->attr[0] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR0);
+	c2->attr[1] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR1);
+	c2->attr[2] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR2);
+	c2->attr[3] = mvpp2_read(priv, MVPP22_CLS_C2_ATTR3);
+}
+
+static void mvpp2_port_c2_rss_enable(struct mvpp2_port *port)
+{
+	struct mvpp2_cls_c2_entry c2;
+
+	mvpp2_cls_c2_read(port->priv, MVPP22_CLS_C2_RSS_ENTRY(port->id), &c2);
+
+	c2.attr[2] |= MVPP22_CLS_C2_ATTR2_RSS_EN;
+
+	mvpp2_cls_c2_write(port->priv, &c2);
+}
+
+static void mvpp2_port_c2_rss_disable(struct mvpp2_port *port)
+{
+	struct mvpp2_cls_c2_entry c2;
+
+	mvpp2_cls_c2_read(port->priv, MVPP22_CLS_C2_RSS_ENTRY(port->id), &c2);
+
+	c2.attr[2] &= ~MVPP22_CLS_C2_ATTR2_RSS_EN;
+
+	mvpp2_cls_c2_write(port->priv, &c2);
+}
+
+static void mvpp2_port_c2_rss_init(struct mvpp2_port *port)
+{
+	struct mvpp2_cls_c2_entry c2;
+	u8 qh, ql;
+
+	memset(&c2, 0, sizeof(c2));
+
+	c2.index = MVPP22_CLS_C2_RSS_ENTRY(port->id);
+
+	c2.tcam[4] = MVPP22_CLS_C2_PORT_ID(BIT(port->id));
+	c2.tcam[4] |= MVPP22_CLS_C2_TCAM_EN(MVPP22_CLS_C2_PORT_ID(BIT(port->id)));
+
+	/* Update RSS status after matching this entry */
+	c2.act = MVPP22_CLS_C2_ACT_RSS_EN(MVPP22_C2_UPD_LOCK);
+
+	/* Mark packet as "forwarded to software", needed for RSS */
+	c2.act |= MVPP22_CLS_C2_ACT_FWD(MVPP22_C2_FWD_SW_LOCK);
+
+	/* Configure the default RxQ : Update Queue Low and Queue High, but
+	 * don't lock.
+	 */
+	c2.act |= MVPP22_CLS_C2_ACT_QHIGH(MVPP22_C2_UPD) |
+		   MVPP22_CLS_C2_ACT_QLOW(MVPP22_C2_UPD);
+
+	qh = (port->first_rxq & MVPP22_CLS_C2_ATTR0_QHIGH_MASK) >> 3;
+	ql = port->first_rxq & MVPP22_CLS_C2_ATTR0_QLOW_MASK;
+
+	c2.attr[0] = MVPP22_CLS_C2_ATTR0_QHIGH(qh) |
+		      MVPP22_CLS_C2_ATTR0_QLOW(ql);
+
+	mvpp2_cls_c2_write(port->priv, &c2);
+}
+
 void mvpp22_rss_enable(struct mvpp2_port *port)
 {
-	struct mvpp2_cls_lookup_entry le;
-
-	mvpp2_cls_lookup_read(port->priv, port->id, 0, &le);
-
-	/* Enable classification lookup */
-	le.data |= MVPP2_CLS_LKP_TBL_LOOKUP_EN_MASK;
-
-	/* In this mode, the default RxQ is used as an index in the RxQ2RSS
-	 * Table. We use the port_id to determine which RSS Table to use, so
-	 * we need to update the default RxQ.
-	 */
-	le.data &= ~MVPP2_CLS_LKP_TBL_RXQ_MASK;
-	le.data |= port->id;
-
-	/* Update lookup ID table entry */
-	mvpp2_cls_lookup_write(port->priv, &le);
+	mvpp2_port_c2_rss_enable(port);
 }
 
 void mvpp22_rss_disable(struct mvpp2_port *port)
 {
-	struct mvpp2_cls_lookup_entry le;
-
-	mvpp2_cls_lookup_read(port->priv, port->id, 0, &le);
-
-	/* Disable classification lookup */
-	le.data &= ~MVPP2_CLS_LKP_TBL_LOOKUP_EN_MASK;
-
-	/* We won't be performing classification actions, so the default RxQ
-	 * in this entry need to be updated to the real first_rxq associated
-	 * with this port
-	 */
-	le.data &= ~MVPP2_CLS_LKP_TBL_RXQ_MASK;
-	le.data |= port->first_rxq;
-
-	/* Update lookup ID table entry */
-	mvpp2_cls_lookup_write(port->priv, &le);
+	mvpp2_port_c2_rss_disable(port);
 }
 
 /* Set CPU queue number for oversize packets */
@@ -266,181 +920,73 @@ void mvpp22_rss_fill_table(struct mvpp2_port *port, u32 table)
 	}
 }
 
-static int mvpp2_flow_add_hek_field(struct mvpp2_cls_flow_entry *fe,
-				    u32 field_id)
-{
-	int nb_fields = mvpp2_cls_sw_flow_hek_num_get(fe);
-
-	if (nb_fields == MVPP2_FLOW_N_FIELDS)
-		return -EINVAL;
-
-	mvpp2_cls_sw_flow_hek_set(fe, nb_fields, field_id);
-
-	mvpp2_cls_sw_flow_hek_num_set(fe, nb_fields + 1);
-
-	return 0;
-}
-
-/* Add HEK fields to the flow command */
-static int mvpp2_rss_hash_opts_set(struct mvpp2_cls_flow_entry *fe, u32 cmd,
-				   int proto)
-{
-	/* It's a requirement to add HEK fields to the flow in ascending
-	 * field_id order
-	 */
-	if (cmd & RXH_VLAN)
-		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_VLAN))
-			return -EINVAL;
-
-	if (proto == MVPP2_RSS_IP4) {
-		if (cmd & RXH_IP_SRC)
-			if (mvpp2_flow_add_hek_field(fe,
-						     MVPP22_CLS_FIELD_IP4SA))
-				return -EINVAL;
-
-		if (cmd & RXH_IP_DST)
-			if (mvpp2_flow_add_hek_field(fe,
-						     MVPP22_CLS_FIELD_IP4DA))
-				return -EINVAL;
-	} else {
-		if (cmd & RXH_IP_SRC)
-			if (mvpp2_flow_add_hek_field(fe,
-						     MVPP22_CLS_FIELD_IP6SA))
-				return -EINVAL;
-
-		if (cmd & RXH_IP_DST)
-			if (mvpp2_flow_add_hek_field(fe,
-						     MVPP22_CLS_FIELD_IP6DA))
-				return -EINVAL;
-	}
-
-	if (cmd & RXH_L4_B_0_1)
-		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_L4SIP))
-			return -EINVAL;
-
-	if (cmd & RXH_L4_B_2_3)
-		if (mvpp2_flow_add_hek_field(fe, MVPP22_CLS_FIELD_L4DIP))
-			return -EINVAL;
-	return 0;
-}
-
 int mvpp2_rss_set_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
 {
-	int ret = 0, engine = MVPP22_CLS_ENGINE_C3HB;
-	int flow_id = MVPP22_RSS_FLOW_HASH(port->id);
-	struct mvpp2_cls_flow_entry fe;
-
-	mvpp2_cls_flow_read(port->priv, flow_id, &fe);
-
-	/* Clear former HEK parameters */
-	mvpp2_cls_sw_flow_hek_num_set(&fe, 0);
-	fe.data[2] = 0;
+	u16 hash_opts = 0;
 
 	switch (info->flow_type) {
-	case IPV4_FLOW:
-		/* When L4 data isn't needed, we use C3HA engine. C3HB engine
-		 * automatically adds the L4 info field to the hash.
-		 * The L4 info field comes from the Header Parser.
-		 */
-		engine = MVPP22_CLS_ENGINE_C3HA;
 	case TCP_V4_FLOW:
 	case UDP_V4_FLOW:
-		ret = mvpp2_rss_hash_opts_set(&fe, info->data, MVPP2_RSS_IP4);
-		break;
-	case IPV6_FLOW:
-		engine = MVPP22_CLS_ENGINE_C3HA;
 	case TCP_V6_FLOW:
 	case UDP_V6_FLOW:
-		ret = mvpp2_rss_hash_opts_set(&fe, info->data, MVPP2_RSS_IP6);
+		if (info->data & RXH_VLAN)
+			hash_opts |= MVPP22_CLS_HEK_OPT_VLAN;
+		if (info->data & RXH_L4_B_0_1)
+			hash_opts |= MVPP22_CLS_HEK_OPT_L4SIP;
+		if (info->data & RXH_L4_B_2_3)
+			hash_opts |= MVPP22_CLS_HEK_OPT_L4DIP;
+	case IPV4_FLOW:
+	case IPV6_FLOW:
+		if (info->data & RXH_IP_SRC)
+			hash_opts |= (MVPP22_CLS_HEK_OPT_IP4SA |
+				     MVPP22_CLS_HEK_OPT_IP6SA);
+		if (info->data & RXH_IP_DST)
+			hash_opts |= (MVPP22_CLS_HEK_OPT_IP4DA |
+				     MVPP22_CLS_HEK_OPT_IP6DA);
 		break;
 	default: return -EOPNOTSUPP;
 	}
 
-	mvpp2_cls_sw_flow_eng_set(&fe, engine);
-
-	mvpp2_cls_flow_write(port->priv, &fe);
-
-	return ret;
+	return mvpp2_port_rss_hash_opts_set(port, info->flow_type, hash_opts);
 }
 
 int mvpp2_rss_get_flow(struct mvpp2_port *port, struct ethtool_rxnfc *info)
 {
-	int n_fields, field, flow_id, i;
-	struct mvpp2_cls_flow_entry fe;
+	long unsigned int hash_opts;
+	int i;
 
-	flow_id = MVPP22_RSS_FLOW_HASH(port->id);
+	hash_opts = mvpp2_port_rss_hash_opts_get(port, info->flow_type);
 
-	mvpp2_cls_flow_read(port->priv, flow_id, &fe);
-
-	n_fields = mvpp2_cls_sw_flow_hek_num_get(&fe);
-	info->data = 0;
-
-	for (i = 0; i < n_fields; i++) {
-		field = mvpp2_cls_sw_flow_hek_get(&fe, i);
-
-		switch (field) {
-		case MVPP22_CLS_FIELD_VLAN:
+	for_each_set_bit(i, &hash_opts, MVPP22_CLS_HEK_N_FIELDS) {
+		switch (BIT(i)) {
+		case MVPP22_CLS_HEK_OPT_VLAN:
 			info->data |= RXH_VLAN;
 			break;
-		case MVPP22_CLS_FIELD_IP4SA:
-		case MVPP22_CLS_FIELD_IP6SA:
+		case MVPP22_CLS_HEK_OPT_IP4SA:
+		case MVPP22_CLS_HEK_OPT_IP6SA:
 			info->data |= RXH_IP_SRC;
 			break;
-		case MVPP22_CLS_FIELD_IP6DA:
-		case MVPP22_CLS_FIELD_IP4DA:
+		case MVPP22_CLS_HEK_OPT_IP4DA:
+		case MVPP22_CLS_HEK_OPT_IP6DA:
 			info->data |= RXH_IP_DST;
 			break;
-		case MVPP22_CLS_FIELD_L4SIP:
+		case MVPP22_CLS_HEK_OPT_L4SIP:
 			info->data |= RXH_L4_B_0_1;
 			break;
-		case MVPP22_CLS_FIELD_L4DIP:
+		case MVPP22_CLS_HEK_OPT_L4DIP:
 			info->data |= RXH_L4_B_2_3;
 			break;
 		default:
 			return -EINVAL;
+
 		}
 	}
-
 	return 0;
-}
-
-/* Initial configuration of the classifier C2 engine, used to tag packets for
- * RSS
- */
-static void mvpp2_init_cls_c2(struct mvpp2 *priv)
-{
-	u32 val;
-
-	/* Select the TCAM entry */
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_IDX, MVPP22_CLS_C2_MATCH_ALL_IDX);
-
-	/* We want to match everything with this C2 TCAM entry, so we don't
-	 * enable any specific pattern matching
-	 */
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA0, 0);
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA1, 0);
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA2, 0);
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA3, 0);
-
-	/* Enable all ports. This means that we filter not port, that's why we
-	 * don't enable any PORT_ID bit in the TCAM
-	 */
-	mvpp2_write(priv, MVPP22_CLS_C2_TCAM_DATA4, 0);
-
-	/* Configure C2 action to enable RSS, soft forwarding and lock that */
-	val = MVPP22_CLS_C2_ACT_RSS_EN(MVPP22_C2_UPD_LOCK);
-	val |= MVPP22_CLS_C2_ACT_FWD(MVPP22_C2_FWD_SW_LOCK);
-	mvpp2_write(priv, MVPP22_CLS_C2_ACT, val);
-
-	/* Enable RSS after a lookup */
-	mvpp2_write(priv, MVPP22_CLS_C2_ATTR2, MVPP22_CLS_C2_ATTR2_RSS_EN);
 }
 
 void mvpp2_port_init_rss(struct mvpp2_port *port)
 {
-	struct mvpp2_cls_lookup_entry le;
 	struct mvpp2 *priv = port->priv;
-	struct mvpp2_cls_flow_entry fe;
 	int i;
 
 	/* Set the table width: replace the whole classifier Rx queue number
@@ -449,14 +995,13 @@ void mvpp2_port_init_rss(struct mvpp2_port *port)
 	mvpp2_write(priv, MVPP22_RSS_INDEX, MVPP22_RSS_INDEX_TABLE(port->id));
 	mvpp2_write(priv, MVPP22_RSS_WIDTH, 8);
 
-	/* Loop through the classifier Rx Queues and map them to a RSS table.
-	 * Map them all to the first table (0) by default.
+	/* The default RxQ is used as a key to select the RSS table to use.
+	 * We use one RSS table per port.
 	 */
-	for (i = 0; i < MVPP2_CLS_RX_QUEUES; i++) {
-		mvpp2_write(priv, MVPP22_RSS_INDEX, MVPP22_RSS_INDEX_QUEUE(i));
-		mvpp2_write(priv, MVPP22_RXQ2RSS_TABLE,
-			    MVPP22_RSS_TABLE_POINTER(port->id));
-	}
+	mvpp2_write(priv, MVPP22_RSS_INDEX,
+		    MVPP22_RSS_INDEX_QUEUE(port->first_rxq));
+	mvpp2_write(priv, MVPP22_RXQ2RSS_TABLE,
+		    MVPP22_RSS_TABLE_POINTER(port->id));
 
 	/* Configure the first table to evenly distribute the packets across
 	 * real Rx Queues. The table entries map a hash to a port Rx Queue.
@@ -466,56 +1011,18 @@ void mvpp2_port_init_rss(struct mvpp2_port *port)
 
 	mvpp22_rss_fill_table(port, port->id);
 
-	/* Select the relevant flow in the flow table, according to the RSS
-	 * hash used
-	 */
-	memset(&fe, 0, sizeof(fe));
+	mvpp2_port_c2_rss_init(port);
 
-	fe.index = MVPP22_RSS_FLOW_C2(port->id);
-
-	mvpp2_cls_sw_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C2);
-	mvpp2_cls_sw_flow_port_id_sel(&fe, true);
-	mvpp2_cls_sw_flow_last_set(&fe, 0);
-	mvpp2_cls_sw_flow_pri_set(&fe, 0);
-	mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_FIRST1);
-	mvpp2_cls_sw_flow_port_add(&fe, BIT(port->id));
-
-	mvpp2_cls_flow_write(priv, &fe);
-
-	/* Add the relevant flows for RSS */
-	memset(&fe, 0, sizeof(fe));
-
-	fe.index = MVPP22_RSS_FLOW_HASH(port->id);
-
-	/* Default hash generation parmeters : Use 2T generation */
-	mvpp2_cls_sw_flow_hek_num_set(&fe, 2);
-	mvpp2_cls_sw_flow_hek_set(&fe, 0, MVPP22_CLS_FIELD_IP4SA);
-	mvpp2_cls_sw_flow_hek_set(&fe, 1, MVPP22_CLS_FIELD_IP4DA);
-	mvpp2_cls_sw_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C3HA);
-	mvpp2_cls_sw_flow_port_id_sel(&fe, true);
-	mvpp2_cls_sw_flow_last_set(&fe, 1);
-	mvpp2_cls_sw_flow_pri_set(&fe, 1);
-	mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_LAST);
-	mvpp2_cls_sw_flow_port_add(&fe, BIT(port->id));
-
-	mvpp2_cls_flow_write(priv, &fe);
-
-	/* Configure lookup */
-	le.lkpid = port->id;
-	/* We only use way 0 */
-	le.way = 0;
-	le.data = 0;
-
-	/* Set initial CPU queue for receiving packets */
-	le.data |= port->first_rxq;
-
-	/* Set flow id */
-	le.data |= MVPP2_CLS_LKP_FLOW_PTR(MVPP22_RSS_FLOW_FIRST(port->id));
-
-	mvpp2_cls_lookup_write(port->priv, &le);
+	/* Configure default flows */
+	mvpp2_port_rss_hash_opts_set(port, IPV4_FLOW, RXH_IP_SRC | RXH_IP_DST);
+	mvpp2_port_rss_hash_opts_set(port, IPV6_FLOW, RXH_IP_SRC | RXH_IP_DST);
+	mvpp2_port_rss_hash_opts_set(port, TCP_V4_FLOW, RXH_IP_SRC | RXH_IP_DST);
+	mvpp2_port_rss_hash_opts_set(port, TCP_V6_FLOW, RXH_IP_SRC | RXH_IP_DST);
+	mvpp2_port_rss_hash_opts_set(port, UDP_V4_FLOW, RXH_IP_SRC | RXH_IP_DST);
+	mvpp2_port_rss_hash_opts_set(port, UDP_V6_FLOW, RXH_IP_SRC | RXH_IP_DST);
 }
 
 void mvpp2_init_rss(struct mvpp2 *priv)
 {
-	mvpp2_init_cls_c2(priv);
+	mvpp2_port_rss_init_flows(priv);
 }

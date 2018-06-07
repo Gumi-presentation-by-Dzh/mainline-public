@@ -215,6 +215,10 @@
 #define MVPP2_PRS_RI_UDF7_IP6_LITE		BIT(29)
 #define MVPP2_PRS_RI_DROP_MASK			0x80000000
 
+#define MVPP2_PRS_IP_MASK			(MVPP2_PRS_RI_L3_PROTO_MASK | \
+						MVPP2_PRS_RI_IP_FRAG_MASK | \
+						MVPP2_PRS_RI_L4_PROTO_MASK)
+
 /* Sram additional info bits assignment */
 #define MVPP2_PRS_IPV4_DIP_AI_BIT		BIT(0)
 #define MVPP2_PRS_IPV6_NO_EXT_AI_BIT		BIT(0)
@@ -272,6 +276,11 @@ struct mvpp2_prs_entry {
 	union mvpp2_prs_sram_entry sram;
 };
 
+struct mvpp2_prs_result_info {
+	u32 ri;
+	u32 ri_mask;
+};
+
 struct mvpp2_prs_shadow {
 	bool valid;
 	bool finish;
@@ -314,6 +323,8 @@ void mvpp2_prs_sram_next_lu_set(struct mvpp2_prs_entry *pe, unsigned int lu);
 int mvpp2_prs_mac_da_accept(struct mvpp2_port *port, const u8 *da, bool add);
 
 int mvpp2_prs_tag_mode_set(struct mvpp2 *priv, int port, int type);
+
+int mvpp2_prs_add_flow(struct mvpp2 *priv, int flow, u32 ri, u32 ri_mask);
 
 int mvpp2_prs_def_flow(struct mvpp2_port *port);
 

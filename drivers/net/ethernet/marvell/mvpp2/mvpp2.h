@@ -89,7 +89,7 @@
 #define     MVPP2_CLS_LKP_INDEX_WAY_OFFS	6
 #define MVPP2_CLS_LKP_TBL_REG			0x1818
 #define     MVPP2_CLS_LKP_TBL_RXQ_MASK		0xff
-#define     MVPP2_CLS_LKP_FLOW_PTR(rxq)		((rxq) << 16)
+#define     MVPP2_CLS_LKP_FLOW_PTR(flow)	((flow) << 16)
 #define     MVPP2_CLS_LKP_TBL_LOOKUP_EN_MASK	BIT(25)
 #define MVPP2_CLS_FLOW_INDEX_REG		0x1820
 #define MVPP2_CLS_FLOW_TBL0_REG			0x1824
@@ -131,7 +131,15 @@
 #define     MVPP22_CLS_C2_ACT_RSS_EN(act)	((act) << 19)
 #define     MVPP22_CLS_C2_ACT_FWD_MASK		GENMASK(15, 13)
 #define     MVPP22_CLS_C2_ACT_FWD(act)		((act) << 13)
+#define     MVPP22_CLS_C2_ACT_QHIGH_MASK	GENMASK(12, 11)
+#define     MVPP22_CLS_C2_ACT_QHIGH(act)	((act) << 11)
+#define     MVPP22_CLS_C2_ACT_QLOW_MASK		GENMASK(10, 9)
+#define     MVPP22_CLS_C2_ACT_QLOW(act)		((act) << 9)
 #define MVPP22_CLS_C2_ATTR0			0x1b64
+#define     MVPP22_CLS_C2_ATTR0_QHIGH_MASK	0x1f
+#define     MVPP22_CLS_C2_ATTR0_QHIGH(qh)	((qh) << 24)
+#define     MVPP22_CLS_C2_ATTR0_QLOW_MASK	0x7
+#define     MVPP22_CLS_C2_ATTR0_QLOW(ql)	((ql) << 21)
 #define MVPP22_CLS_C2_ATTR1			0x1b68
 #define MVPP22_CLS_C2_ATTR2			0x1b6c
 #define     MVPP22_CLS_C2_ATTR2_RSS_EN		BIT(30)
