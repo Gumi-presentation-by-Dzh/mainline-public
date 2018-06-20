@@ -884,7 +884,7 @@ static void mvpp2_port_c2_rss_init(struct mvpp2_port *port)
 	c2.act |= MVPP22_CLS_C2_ACT_QHIGH(MVPP22_C2_UPD) |
 		   MVPP22_CLS_C2_ACT_QLOW(MVPP22_C2_UPD);
 
-	qh = (port->first_rxq & MVPP22_CLS_C2_ATTR0_QHIGH_MASK) >> 3;
+	qh = (port->first_rxq >> 3) & MVPP22_CLS_C2_ATTR0_QHIGH_MASK;
 	ql = port->first_rxq & MVPP22_CLS_C2_ATTR0_QLOW_MASK;
 
 	c2.attr[0] = MVPP22_CLS_C2_ATTR0_QHIGH(qh) |
