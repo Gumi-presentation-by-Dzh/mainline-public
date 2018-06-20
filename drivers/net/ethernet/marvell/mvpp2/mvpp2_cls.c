@@ -522,13 +522,18 @@ static void mvpp2_rss_flow_init(struct mvpp2 *priv, struct mvpp2_cls_flow *flow)
 		fe.index = MVPP2_PORT_FLOW_HASH_ENTRY(i, flow->flow_id);
 
 		mvpp2_cls_sw_flow_port_id_sel(&fe, true);
-		mvpp2_cls_sw_flow_last_set(&fe, 1);
-		mvpp2_cls_sw_flow_pri_set(&fe, 1);
-		mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_LAST);
+		mvpp2_cls_sw_flow_pri_set(&fe, i + 1);
+		mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_MIDDLE);
 		mvpp2_cls_sw_flow_port_add(&fe, BIT(i));
 
 		mvpp2_cls_flow_write(priv, &fe);
 	}
+
+	/* Update the last entry */
+	mvpp2_cls_sw_flow_last_set(&fe, 1);
+	mvpp2_cls_sw_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_LAST);
+
+	mvpp2_cls_flow_write(priv, &fe);
 }
 
 /* Adds a field to the Header Extracted Key generation parameters*/
@@ -943,7 +948,7 @@ void mvpp22_rss_fill_table(struct mvpp2_port *port, u32 table)
 		mvpp2_write(priv, MVPP22_RSS_INDEX, sel);
 
 		mvpp2_write(priv, MVPP22_RSS_TABLE_ENTRY,
-			    mvpp22_rxfh_indir(port, port->indir[i]));
+			    port->first_rxq + mvpp22_rxfh_indir(port, port->indir[i]));
 	}
 }
 
