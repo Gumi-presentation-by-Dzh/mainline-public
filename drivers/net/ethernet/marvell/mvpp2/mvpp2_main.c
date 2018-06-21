@@ -4627,7 +4627,7 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 
 	ntxqs = MVPP2_MAX_TXQ;
 	if (priv->hw_version == MVPP22 && queue_mode == MVPP2_QDIST_MULTI_MODE)
-		nrxqs = MVPP2_DEFAULT_RXQ * num_possible_cpus();
+		nrxqs = MVPP2_DEFAULT_RXQ * num_present_cpus();
 	else
 		nrxqs = MVPP2_DEFAULT_RXQ;
 
