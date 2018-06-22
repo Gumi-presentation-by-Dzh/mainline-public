@@ -637,7 +637,9 @@ static int mvpp2_port_rss_hash_opts_set(struct mvpp2_port *port, int flow_type,
 
 		hash_opts = flow->supported_hash_opts & requested_opts;
 
-		/* We need to use C3HB engine to access L4 infos */
+		/* Use C3HB engine to access L4 infos. This adds L4 infos to the
+		 * hash parameters
+		 */
 		if (hash_opts & MVPP22_CLS_HEK_L4_OPTS)
 			engine = MVPP22_CLS_ENGINE_C3HB;
 		else
@@ -665,8 +667,14 @@ u16 mvpp2_flow_get_hek_fields(struct mvpp2_cls_flow_entry *fe)
 		field = mvpp2_cls_sw_flow_hek_get(fe, i);
 
 		switch (field) {
+		case MVPP22_CLS_FIELD_MAC_DA:
+			hash_opts |= MVPP22_CLS_HEK_OPT_MAC_DA;
+			break;
 		case MVPP22_CLS_FIELD_VLAN:
 			hash_opts |= MVPP22_CLS_HEK_OPT_VLAN;
+			break;
+		case MVPP22_CLS_FIELD_L3_PROTO:
+			hash_opts |= MVPP22_CLS_HEK_OPT_L3_PROTO;
 			break;
 		case MVPP22_CLS_FIELD_IP4SA:
 			hash_opts |= MVPP22_CLS_HEK_OPT_IP4SA;
@@ -962,14 +970,18 @@ int mvpp2_rss_flow_hash_opts_set(struct mvpp2_port *port,
 	case UDP_V4_FLOW:
 	case TCP_V6_FLOW:
 	case UDP_V6_FLOW:
-		if (info->data & RXH_VLAN)
-			hash_opts |= MVPP22_CLS_HEK_OPT_VLAN;
 		if (info->data & RXH_L4_B_0_1)
 			hash_opts |= MVPP22_CLS_HEK_OPT_L4SIP;
 		if (info->data & RXH_L4_B_2_3)
 			hash_opts |= MVPP22_CLS_HEK_OPT_L4DIP;
 	case IPV4_FLOW:
 	case IPV6_FLOW:
+		if (info->data & RXH_L2DA)
+			hash_opts |= MVPP22_CLS_HEK_OPT_MAC_DA;
+		if (info->data & RXH_VLAN)
+			hash_opts |= MVPP22_CLS_HEK_OPT_VLAN;
+		if (info->data & RXH_L3_PROTO)
+			hash_opts |= MVPP22_CLS_HEK_OPT_L3_PROTO;
 		if (info->data & RXH_IP_SRC)
 			hash_opts |= (MVPP22_CLS_HEK_OPT_IP4SA |
 				     MVPP22_CLS_HEK_OPT_IP6SA);
@@ -994,8 +1006,14 @@ int mvpp2_rss_flow_hash_opts_get(struct mvpp2_port *port,
 
 	for_each_set_bit(i, &hash_opts, MVPP22_CLS_HEK_N_FIELDS) {
 		switch (BIT(i)) {
+		case MVPP22_CLS_HEK_OPT_MAC_DA:
+			info->data |= RXH_L2DA;
+			break;
 		case MVPP22_CLS_HEK_OPT_VLAN:
 			info->data |= RXH_VLAN;
+			break;
+		case MVPP22_CLS_HEK_OPT_L3_PROTO:
+			info->data |= RXH_L3_PROTO;
 			break;
 		case MVPP22_CLS_HEK_OPT_IP4SA:
 		case MVPP22_CLS_HEK_OPT_IP6SA:
