@@ -3276,6 +3276,12 @@ static void mvpp2_irqs_deinit(struct mvpp2_port *port)
 	}
 }
 
+static bool mvpp22_rss_is_supported(struct mvpp2 *priv)
+{
+	return queue_mode == MVPP2_QDIST_MULTI_MODE &&
+	       priv->hw_version == MVPP22;
+}
+
 static int mvpp2_open(struct net_device *dev)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
@@ -3368,7 +3374,7 @@ static int mvpp2_open(struct net_device *dev)
 
 	mvpp2_start_dev(port);
 
-	if (priv->hw_version == MVPP22)
+	if (mvpp22_rss_is_supported(priv))
 		mvpp22_init_rss(port);
 
 	/* Start hardware statistics gathering */
