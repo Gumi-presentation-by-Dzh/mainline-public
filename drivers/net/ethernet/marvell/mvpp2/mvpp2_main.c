@@ -3632,6 +3632,13 @@ static int mvpp2_set_features(struct net_device *dev,
 		}
 	}
 
+	if (changed & NETIF_F_RXHASH) {
+		if (features & NETIF_F_RXHASH)
+			mvpp22_rss_enable(port);
+		else
+			mvpp22_rss_disable(port);
+	}
+
 	return 0;
 }
 
@@ -4761,6 +4768,12 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	dev->features = features | NETIF_F_RXCSUM;
 	dev->hw_features |= features | NETIF_F_RXCSUM | NETIF_F_GRO |
 			    NETIF_F_HW_VLAN_CTAG_FILTER;
+
+	if (mvpp22_rss_is_supported(priv)) {
+		dev->features |= NETIF_F_RXHASH;
+		dev->hw_features |= NETIF_F_RXHASH;
+		mvpp22_rss_enable(port);
+	}
 
 	if (port->pool_long->id == MVPP2_BM_JUMBO && port->id != 0) {
 		dev->features &= ~(NETIF_F_IP_CSUM | NETIF_F_IPV6_CSUM);
