@@ -34,6 +34,7 @@
 #define CP110_PCIEx_CONF_BASE(iface)	(CP110_PCIEx_CPU_MEM_BASE(iface) + 0xf00000)
 #define CP110_PCIE_MEM_CFG		(0x82000000)
 #define CP110_PCIE_MEM_SIZE		(0xf00000)
+#define CP110_PINCTRL_COMPAT		"marvell,armada-7k-pinctrl"
 
 #include "armada-cp110.dtsi"
 
@@ -44,6 +45,7 @@
 #undef CP110_PCIE0_BASE
 #undef CP110_PCIE1_BASE
 #undef CP110_PCIE2_BASE
+#undef CP110_PINCTRL_COMPAT
 
 &cp0_gpio1 {
 	status = "okay";
@@ -55,8 +57,6 @@
 
 &cp0_syscon0 {
 	cp0_pinctrl: pinctrl {
-		compatible = "marvell,armada-7k-pinctrl";
-
 		nand_pins: nand-pins {
 			marvell,pins =
 			"mpp15", "mpp16", "mpp17", "mpp18",
