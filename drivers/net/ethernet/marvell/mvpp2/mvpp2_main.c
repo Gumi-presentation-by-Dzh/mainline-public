@@ -1039,6 +1039,7 @@ static int mvpp22_gop_init(struct mvpp2_port *port)
 	if (!priv->sysctrl_base)
 		return 0;
 
+	pr_info("%s : Setting GoP to %s", __func__, phy_modes(port->phy_interface));
 	switch (port->phy_interface) {
 	case PHY_INTERFACE_MODE_RGMII:
 	case PHY_INTERFACE_MODE_RGMII_ID:
@@ -1174,6 +1175,7 @@ static int mvpp22_comphy_init(struct mvpp2_port *port)
 	if (!port->comphy)
 		return 0;
 
+	pr_info("%s : Setting Comphy to %s", __func__, phy_modes(port->phy_interface));
 	switch (port->phy_interface) {
 	case PHY_INTERFACE_MODE_SGMII:
 	case PHY_INTERFACE_MODE_1000BASEX:
@@ -4337,6 +4339,7 @@ static void mvpp22_xlg_link_state(struct mvpp2_port *port,
 		state->pause |= MLO_PAUSE_TX;
 	if (val & MVPP22_XLG_CTRL0_RX_FLOW_CTRL_EN)
 		state->pause |= MLO_PAUSE_RX;
+	pr_info("%s : Link is %s\n", __func__, state->link ? "up" : "down");
 }
 
 static void mvpp2_gmac_link_state(struct mvpp2_port *port,
@@ -4371,6 +4374,8 @@ static void mvpp2_gmac_link_state(struct mvpp2_port *port,
 		state->pause |= MLO_PAUSE_RX;
 	if (val & MVPP2_GMAC_STATUS0_TX_PAUSE)
 		state->pause |= MLO_PAUSE_TX;
+
+	pr_info("%s : Link is %s\n", __func__, state->link ? "up" : "down");
 }
 
 static int mvpp2_phylink_mac_link_state(struct net_device *dev,
@@ -4560,6 +4565,7 @@ static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
 {
 	struct mvpp2_port *port = netdev_priv(dev);
 	u32 val;
+	pr_info("%s\n", __func__);
 
 	if (!phylink_autoneg_inband(mode) &&
 	    !mvpp22_is_10g_interface(interface)) {
@@ -4582,6 +4588,7 @@ static void mvpp2_mac_link_down(struct net_device *dev, unsigned int mode,
 {
 	struct mvpp2_port *port = netdev_priv(dev);
 	u32 val;
+	pr_info("%s\n", __func__);
 
 	if (!phylink_autoneg_inband(mode) &&
 	    !mvpp22_is_10g_interface(interface)) {
@@ -4634,6 +4641,7 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	int phy_mode;
 	int err, i, cpu;
 
+	pr_info("%s : Probing port\n", __func__);
 	if (port_node) {
 		has_tx_irqs = mvpp2_port_has_tx_irqs(priv, port_node);
 	} else {
@@ -4850,6 +4858,7 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 
 	priv->port_list[priv->port_count++] = port;
 
+	pr_info("%s : Done for port %d\n", __func__, port->id);
 	return 0;
 
 err_phylink:
@@ -5316,6 +5325,8 @@ static int mvpp2_probe(struct platform_device *pdev)
 	mvpp2_dbgfs_init(priv, pdev->name);
 
 	platform_set_drvdata(pdev, priv);
+
+	pr_info("PPv2 probed\n");
 	return 0;
 
 err_port_probe:
