@@ -58,6 +58,8 @@ static struct {
  */
 static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
 			     const struct phylink_link_state *state);
+static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
+			      phy_interface_t interface, struct phy_device *phy);
 
 /* Queue modes */
 #define MVPP2_QDIST_SINGLE_MODE	0
@@ -3163,7 +3165,12 @@ static void mvpp2_start_dev(struct mvpp2_port *port)
 		mvpp22_mode_reconfigure(port);
 
 	if (port->phylink) {
+		netif_carrier_off(port->dev);
 		phylink_start(port->phylink);
+
+		if (!(port->flags & MVPP2_F_FIXED_LINK))
+			mvpp2_mac_link_up(port->dev, MLO_AN_FIXED,
+					  port->phy_interface, NULL);
 	} else {
 		/* Phylink isn't used as of now for ACPI, so the MAC has to be
 		 * configured manually when the interface is started. This will
@@ -3171,9 +3178,10 @@ static void mvpp2_start_dev(struct mvpp2_port *port)
 		 */
 		struct phylink_link_state state = {
 			.interface = port->phy_interface,
-			.link = 1,
 		};
 		mvpp2_mac_config(port->dev, MLO_AN_INBAND, &state);
+		mvpp2_mac_link_up(port->dev, MLO_AN_INBAND, port->phy_interface,
+				  NULL);
 	}
 
 	netif_tx_start_all_queues(port->dev);
@@ -4416,6 +4424,10 @@ static void mvpp2_xlg_config(struct mvpp2_port *port, unsigned int mode,
 	ctrl4 &= ~MVPP22_XLG_CTRL4_MACMODSELECT_GMAC;
 	ctrl4 |= MVPP22_XLG_CTRL4_FWD_FC | MVPP22_XLG_CTRL4_FWD_PFC |
 		 MVPP22_XLG_CTRL4_EN_IDLE_CHECK;
+	if (state->interface == PHY_INTERFACE_MODE_RXAUI)
+		ctrl4 |= MVPP22_XLG_CTRL4_USE_XPCS;
+	else
+		ctrl4 &= ~MVPP22_XLG_CTRL4_USE_XPCS;
 
 	writel(ctrl0, port->base + MVPP22_XLG_CTRL0_REG);
 	writel(ctrl4, port->base + MVPP22_XLG_CTRL4_REG);
@@ -4516,10 +4528,6 @@ static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
 		return;
 	}
 
-	netif_tx_stop_all_queues(port->dev);
-	if (!port->has_phy)
-		netif_carrier_off(port->dev);
-
 	/* Make sure the port is disabled when reconfiguring the mode */
 	mvpp2_port_disable(port);
 
@@ -4544,16 +4552,7 @@ static void mvpp2_mac_config(struct net_device *dev, unsigned int mode,
 	if (port->priv->hw_version == MVPP21 && port->flags & MVPP2_F_LOOPBACK)
 		mvpp2_port_loopback_set(port, state);
 
-	/* If the port already was up, make sure it's still in the same state */
-	if (state->link || !port->has_phy) {
-		mvpp2_port_enable(port);
-
-		mvpp2_egress_enable(port);
-		mvpp2_ingress_enable(port);
-		if (!port->has_phy)
-			netif_carrier_on(dev);
-		netif_tx_wake_all_queues(dev);
-	}
+	mvpp2_port_enable(port);
 }
 
 static void mvpp2_mac_link_up(struct net_device *dev, unsigned int mode,
@@ -4712,6 +4711,9 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	if (fwnode_property_read_bool(port_fwnode, "marvell,loopback"))
 		port->flags |= MVPP2_F_LOOPBACK;
 
+	if (fwnode_property_present(port_fwnode, "fixed-link"))
+		port->flags |= MVPP2_F_FIXED_LINK;
+
 	port->id = id;
 	if (priv->hw_version == MVPP21)
 		port->first_rxq = port->id * port->nrxqs;
@@ -4824,6 +4826,7 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	dev->min_mtu = ETH_MIN_MTU;
 	/* 9704 == 9728 - 20 and rounding to 8 */
 	dev->max_mtu = MVPP2_BM_JUMBO_PKT_SIZE;
+	dev->dev.of_node = port_node;
 
 	/* Phylink isn't used w/ ACPI as of now */
 	if (port_node) {
