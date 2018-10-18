@@ -484,7 +484,8 @@ static void mvpp2_cls_flow_lkp_init(struct mvpp2 *priv,
 	/* We point on the first lookup in the sequence for the flow, that is
 	 * the C2 lookup.
 	 */
-	le.data |= MVPP2_CLS_LKP_FLOW_PTR(MVPP2_FLOW_C2_ENTRY(flow->flow_id));
+	//le.data |= MVPP2_CLS_LKP_FLOW_PTR(MVPP2_FLOW_C2_RSS_ENTRY(flow->flow_id));
+	le.data |= MVPP2_CLS_LKP_FLOW_PTR(MVPP2_FLOW_ENTRY_FIRST(flow->flow_id));
 
 	/* CLS is always enabled, RSS is enabled/disabled in C2 lookup */
 	le.data |= MVPP2_CLS_LKP_TBL_LOOKUP_EN_MASK;
@@ -561,17 +562,40 @@ static void mvpp2_cls_flow_init(struct mvpp2 *priv,
 				const struct mvpp2_cls_flow *flow)
 {
 	struct mvpp2_cls_flow_entry fe;
-	int i;
+	int i, loc, port_id;
 
-	/* C2 lookup */
+	/* ntuple RFS lookups */
+	for (loc = 0; loc < MVPP2_FLOW_NTUPLE_N_LOC; loc++) {
+		for (port_id = 0; port_id < MVPP2_MAX_PORTS; port_id++) {
+			memset(&fe, 0, sizeof(fe));
+			fe.index = MVPP2_PORT_FLOW_NTUPLE(port_id,
+							  flow->flow_id, loc);
+			mvpp2_cls_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C2);
+			mvpp2_cls_flow_port_id_sel(&fe, true);
+			mvpp2_cls_flow_last_set(&fe, 0);
+			mvpp2_cls_flow_pri_set(&fe, port_id + loc * MVPP2_MAX_PORTS);
+
+			if (port_id == 0 && loc == 0)
+				mvpp2_cls_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_FIRST1);
+			else
+				mvpp2_cls_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_MIDDLE);
+
+			mvpp2_cls_flow_lu_type_set(&fe, MVPP2_CLS_C2_LU_TYPE_RFS(flow->flow_type));
+			mvpp2_cls_flow_port_add(&fe, BIT(port_id));
+			mvpp2_cls_flow_write(priv, &fe);
+//			pr_info("Creating flow id %d port %d rfs lookup to entry %d\n", flow->flow_id, port_id, fe.index);
+		}
+	}
+
+	/* C2 RSS lookup */
 	memset(&fe, 0, sizeof(fe));
-	fe.index = MVPP2_FLOW_C2_ENTRY(flow->flow_id);
+	fe.index = MVPP2_FLOW_C2_RSS_ENTRY(flow->flow_id);
 
 	mvpp2_cls_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C2);
 	mvpp2_cls_flow_port_id_sel(&fe, true);
 	mvpp2_cls_flow_last_set(&fe, 0);
-	mvpp2_cls_flow_pri_set(&fe, 0);
-	mvpp2_cls_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_FIRST1);
+	mvpp2_cls_flow_pri_set(&fe, 16);
+	mvpp2_cls_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_MIDDLE);
 	mvpp2_cls_flow_lu_type_set(&fe, MVPP2_CLS_LU_RSS);
 
 	/* Add all ports */
@@ -586,7 +610,7 @@ static void mvpp2_cls_flow_init(struct mvpp2 *priv,
 		fe.index = MVPP2_PORT_FLOW_HASH_ENTRY(i, flow->flow_id);
 
 		mvpp2_cls_flow_port_id_sel(&fe, true);
-		mvpp2_cls_flow_pri_set(&fe, i + 1);
+		mvpp2_cls_flow_pri_set(&fe, i + 17);
 		mvpp2_cls_flow_seq_set(&fe, MVPP2_CLS_FLOW_SEQ_MIDDLE);
 		mvpp2_cls_flow_port_add(&fe, BIT(i));
 
@@ -794,7 +818,160 @@ static void mvpp2_cls_port_init_flows(struct mvpp2 *priv)
 	}
 }
 
+static u16 mvpp2_cls_tcp_ip4_spec_to_hek(struct ethtool_tcpip4_spec *mask)
+{
+	u16 hek_opts = 0;
 
+	if (mask->ip4src)
+		hek_opts |= MVPP22_CLS_HEK_OPT_IP4SA;
+	if (mask->ip4dst)
+		hek_opts |= MVPP22_CLS_HEK_OPT_IP4DA;
+
+	return hek_opts;
+}
+
+static u16 mvpp2_cls_ext_spec_to_hek(struct ethtool_flow_ext *mask)
+{
+	u16 hek_opts = 0;
+
+	if (mask->vlan_tci)
+		hek_opts |= MVPP22_CLS_HEK_OPT_VLAN;
+
+	return hek_opts;
+}
+
+static u16 mvpp2_cls_flow_spec_get_hek(struct ethtool_rx_flow_spec *spec)
+{
+	u16 hek_opts = 0;
+
+	switch(spec->flow_type & ~FLOW_EXT) {
+	case TCP_V4_FLOW:
+		hek_opts |= mvpp2_cls_tcp_ip4_spec_to_hek(&spec->m_u.tcp_ip4_spec);
+		break;
+	case UDP_V4_FLOW:
+		/* UDP flow spec uses the same struct as TCP. */
+		hek_opts |= mvpp2_cls_tcp_ip4_spec_to_hek(&spec->m_u.udp_ip4_spec);
+		break;
+	}
+
+	if (spec->flow_type & FLOW_EXT)
+		hek_opts |= mvpp2_cls_ext_spec_to_hek(&spec->m_ext);
+
+	return hek_opts;
+}
+
+/* Add a C2 lookup to match the given flow spec. It only adds the lookup and
+ * configures the HEK, we also need to add the relevant C2 entry.
+ */
+static int mvpp2_port_cls_flow_add_ntuple(struct mvpp2_port *port,
+					  struct ethtool_rx_flow_spec *spec)
+{
+	struct mvpp2_cls_flow_entry fe;
+	const struct mvpp2_cls_flow *flow;
+	int i, hek_opts;
+
+	for (i = 0; i < MVPP2_N_PRS_FLOWS; i++) {
+		flow = mvpp2_cls_flow_get(i);
+		if (!flow) {
+			pr_info("No flow\n");
+			return -EINVAL;
+		}
+
+		if (flow->flow_type != (spec->flow_type & ~FLOW_EXT))
+			continue;
+
+		if (spec->location >= MVPP2_FLOW_NTUPLE_N_LOC)
+			return -EINVAL;
+
+		hek_opts = mvpp2_cls_flow_spec_get_hek(spec);
+
+		/* If the subflow doesn't match, we simply don't apply the flow.
+		 * This can happen for fragmented traffic.*/
+		if ((hek_opts & flow->supported_hash_opts) != hek_opts) {
+			pr_info("Can't apply the flow, hex opts not supported : HEK = %04x, supp = %04x, index %d, flow_id %d\n",
+				hek_opts, flow->supported_hash_opts,
+				MVPP2_PORT_FLOW_NTUPLE(port->id,
+						       flow->flow_id,
+						       spec->location),
+				flow->flow_id);
+			continue;
+		}
+
+		mvpp2_cls_flow_read(port->priv,
+				    MVPP2_PORT_FLOW_NTUPLE(port->id,
+					    		   flow->flow_id,
+							   spec->location), &fe);
+
+		mvpp2_cls_flow_eng_set(&fe, MVPP22_CLS_ENGINE_C2);
+		mvpp2_flow_set_hek_fields(&fe, hek_opts);
+		mvpp2_cls_flow_lu_type_set(&fe, MVPP2_CLS_C2_LU_TYPE_RFS(spec->flow_type));
+
+		pr_info("Add NTuple to %d\n", fe.index);
+		mvpp2_cls_flow_write(port->priv, &fe);
+	}
+
+	return 0;
+}
+
+static int mvpp2_port_cls_c2_add_ntuple(struct mvpp2_port *port,
+					struct ethtool_rx_flow_spec *spec)
+{
+	struct mvpp2_cls_c2_entry c2;
+	memset(&c2, 0, sizeof(c2));
+
+	c2.index = MVPP22_CLS_C2_FLOW(port->id,
+				      MVPP2_CLS_C2_LU_TYPE_RFS(spec->flow_type),
+				      spec->location);
+
+	c2.tcam[4] = MVPP22_CLS_C2_PORT_ID(BIT(port->id));
+	c2.tcam[4] |= MVPP22_CLS_C2_TCAM_EN(MVPP22_CLS_C2_PORT_ID(BIT(port->id)));
+
+	/* Match on Lookup Type */
+	c2.tcam[4] |= MVPP22_CLS_C2_TCAM_EN(MVPP22_CLS_C2_LU_TYPE(MVPP2_CLS_LU_TYPE_MASK));
+	c2.tcam[4] |= MVPP22_CLS_C2_LU_TYPE(MVPP2_CLS_C2_LU_TYPE_RFS(spec->flow_type));
+
+	/* Disable RSS if there's a match */
+	c2.act = MVPP22_CLS_C2_ACT_RSS_EN(MVPP22_C2_NO_UPD_LOCK);
+
+	/* Fill TCAM */
+	/* 0xc0a82b01 */
+	switch (spec->flow_type & ~FLOW_EXT) {
+	case TCP_V4_FLOW:
+		/* fall through */
+	case UDP_V4_FLOW:
+		/* FIXME */
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	if (spec->flow_type & FLOW_EXT) {
+		if (spec->m_ext.vlan_tci) {
+			pr_info("Setting vlan tci to %08x\n", spec->h_ext.vlan_tci);
+			/* FIXME Is that really in TCAM 0 ?*/
+			c2.tcam[0] = (spec->m_ext.vlan_tci << 16) |
+				     spec->h_ext.vlan_tci;
+		}
+	}
+	//c2.tcam[2] = 0xffff2b01;
+	//c2.tcam[3] = 0xffffc0a8;
+
+	/* Configure the target rx queue. Lock that setting if there's a match,
+	 * so that other RFS rules don't override this one.
+	 */
+	c2.act |= MVPP22_CLS_C2_ACT_QHIGH(MVPP22_C2_UPD_LOCK) |
+		   MVPP22_CLS_C2_ACT_QLOW(MVPP22_C2_UPD_LOCK);
+
+	/* FIXME clean that up. */
+	if (spec->ring_cookie == RX_CLS_FLOW_DISC)
+		c2.act |= 7;
+	else
+		c2.attr[0] = spec->ring_cookie;
+
+	mvpp2_cls_c2_write(port->priv, &c2);
+
+	return 0;
+}
 
 static void mvpp2_port_c2_cls_init(struct mvpp2_port *port)
 {
@@ -1056,6 +1233,31 @@ int mvpp2_ethtool_rxfh_get(struct mvpp2_port *port, struct ethtool_rxnfc *info)
 			return -EINVAL;
 		}
 	}
+	return 0;
+}
+
+int mvpp2_ethtool_cls_rule_ins(struct mvpp2_port *port,
+			       struct ethtool_rxnfc *info)
+{
+	int ret;
+	ret = mvpp2_port_cls_flow_add_ntuple(port, &info->fs);
+	if (ret) {
+		pr_err("Couldn't add flow entry\n");
+		return ret;
+	}
+
+	ret = mvpp2_port_cls_c2_add_ntuple(port, &info->fs);
+	if (ret) {
+		pr_err("Couldn't add c2 entry\n");
+		return ret;
+	}
+
+	return 0;
+}
+
+int mvpp2_ethtool_cls_rule_del(struct mvpp2_port *port,
+			       struct ethtool_rxnfc *info)
+{
 	return 0;
 }
 
